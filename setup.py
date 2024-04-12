@@ -42,3 +42,6 @@ def run(python='python3', pip='pip3'):
             logging.info(f"Successfully installed {package}")
         except subprocess.CalledProcessError as e:
             logging.error(f"Failed to install {package}. Error: {e}")
+
+if __name__ == '__main__':
+    run()

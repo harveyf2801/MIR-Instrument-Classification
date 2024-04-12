@@ -1,13 +1,25 @@
 import numpy as np
 from scipy.signal import hamming
-
 import scipy.fftpack as fft
 
-def calculate_mfcc(audio_signal, sample_rate, num_mfcc=13, frame_size=0.025, frame_stride=0.01, num_filters=26, low_freq=0, high_freq=None):
+def calculate_mfcc(audio_signal, sample_rate, numcep=13, frame_size=0.025,
+                   frame_stride=0.01, nfilt=26, nfft=512, low_freq=0, high_freq=None):
     '''
     Calculates the MFCCs from an audio signal
-    Audio signal from which to compute features
-    
+
+    Parameters:
+        audio_signal (numpy array): Audio signal from which to compute features
+        sample_rate (int): The sample rate of the audio signal
+        numcep (int, optional): The number of MFCCs to return. Defaults to 13.
+        frame_size (float, optional): The size of the frame. Defaults to 0.025.
+        frame_stride (float, optional): The stride of the frame. Defaults to 0.01.
+        nfilt (int, optional): The number of filters. Defaults to 26.
+        nfft (int, optional): The number of FFT points. Defaults to 512.
+        low_freq (int, optional): The low frequency. Defaults to 0.
+        high_freq (int, optional): The high frequency. If None, it will be set to the sample_rate / 2.
+
+    Returns:
+        numpy array: The calculated MFCCs
     '''
     # Pre-emphasis factor of 0.97 to balance the frequency spectrum and improve the signal to noise ratio
     pre_emphasis = 0.97
@@ -32,7 +44,7 @@ def calculate_mfcc(audio_signal, sample_rate, num_mfcc=13, frame_size=0.025, fra
     frames *= hamming(frame_length)  # Applying hamming window to each frame
 
     # Fourier Transform and Power Spectrum
-    magnitude_spectrum = np.abs(fft.fft(frames, n=512))  # Computing the magnitude spectrum of the frames
+    magnitude_spectrum = np.abs(fft.fft(frames, n=nfft))  # Computing the magnitude spectrum of the frames
     power_spectrum = (1.0 / frame_length) * np.square(magnitude_spectrum)  # Computing the power spectrum of the frames
 
     # Mel Filterbank
@@ -40,13 +52,13 @@ def calculate_mfcc(audio_signal, sample_rate, num_mfcc=13, frame_size=0.025, fra
         high_freq = sample_rate / 2
 
     # Converting frequencies to Mel scale
-    mel_points = np.linspace(hz_to_mel(low_freq), hz_to_mel(high_freq), num_filters + 2)
+    mel_points = np.linspace(hz_to_mel(low_freq), hz_to_mel(high_freq), nfilt + 2)
     hz_points = mel_to_hz(mel_points)
-    bin_points = np.floor((512 + 1) * hz_points / sample_rate).astype(int)
+    bin_points = np.floor((nfft + 1) * hz_points / sample_rate).astype(int)
 
     # Creating filter banks
-    filter_bank = np.zeros((num_filters, int(np.floor(512 / 2 + 1))))
-    for m in range(1, num_filters + 1):
+    filter_bank = np.zeros((nfilt, int(np.floor(nfft / 2 + 1))))
+    for m in range(1, nfilt + 1):
         f_m_minus = int(bin_points[m - 1])  # Lower frequency
         f_m = int(bin_points[m])  # Center frequency
         f_m_plus = int(bin_points[m + 1])  # Upper frequency
@@ -63,7 +75,7 @@ def calculate_mfcc(audio_signal, sample_rate, num_mfcc=13, frame_size=0.025, fra
     log_spectrum = 10 * np.log10(filtered_spectrum)  # Applying logarithm to the filtered spectrum
 
     # Discrete Cosine Transform (DCT)
-    dct_matrix = dct_matrix = fft.dct(np.eye(num_filters))[:num_mfcc]  # Creating DCT matrix
+    dct_matrix = dct_matrix = fft.dct(np.eye(nfilt))[:numcep]  # Creating DCT matrix
     mfcc = np.dot(log_spectrum, dct_matrix.T)  # Applying DCT to the log spectrum
 
     return mfcc  # Returning MFCCs
