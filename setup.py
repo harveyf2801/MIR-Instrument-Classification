@@ -19,6 +19,7 @@ packages = [
     'numpy',
     'scipy',
     'librosa',
+    'matplotlib',
     'python_speech_features'
 ]
 
