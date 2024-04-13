@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import librosa
 import pandas as pd
 import torch
@@ -30,9 +31,8 @@ def create_file_annotations(dir):
     df['ClassID'] = df.groupby(['ClassLabel']).ngroup()
 
     # Create length in seconds column
-    df.set_index('Filename', inplace=True)
     for record in df.index:
-        signal, fs = librosa.load(os.path.join(dir, record), mono=True, sr=None)
+        signal, fs = librosa.load(Path(dir, df.loc[record, 'Filename']), mono=True, sr=None)
         df.at[record, 'Length'] = signal.shape[0]/fs
 
     return df
@@ -40,11 +40,11 @@ def create_file_annotations(dir):
 class AudioDataset(Dataset):
   ''' Custom Dataset class for audio instrument classification '''
 
-  def __init__(self, annotation_file, audio_dir, device, transformation, transform_fs, num_samples):
+  def __init__(self, annotations, audio_dir, device, transformation, transform_fs, num_samples):
     '''
     Parameters -
-        annotation_file: a path to a csv file with the annotations for the dataset
-                            these annotations should have the filename at index 0 and class ID at -1
+        annotations: the annotations for the dataset
+                    these annotations should have the filename at index 0 and class ID at -1
         audio_dir:       the path to the audio dataset directory
         device:          the device in use (cuda or cpu)
         transformation:  provides the function for performing preprocessing on the data
@@ -52,7 +52,7 @@ class AudioDataset(Dataset):
         num_samples:     the length n of samples to cut / pad the data to
     '''
     # Read in the annotation file for the dataset
-    self.annotations = pd.read_csv(annotation_file)
+    self.annotations = annotations
 
     # Defining attributes
     self.audio_dir = audio_dir
@@ -60,9 +60,6 @@ class AudioDataset(Dataset):
     self.transformation = transformation.to(self.device) # putting the data onto a cuda device is available
     self.transform_fs = transform_fs
     self.num_samples = num_samples
-
-    # Creating a unique ID for the classes
-    # self.annotations.assign(id=self.annotations.groupby(['ClassLabel']).ngroup())
 
   def __len__(self):
     ''' Magic method to provide the length of the object '''
@@ -96,7 +93,7 @@ class AudioDataset(Dataset):
                         and prediction labelID            '''
       label = self.annotations.loc[index, 'ClassLabel']
       labelID = self.annotations.loc[index, 'ClassID']
-      path = os.path.join(self.audio_dir, label, self.annotations.loc[index, 'Filename'])
+      path = Path(self.audio_dir, self.annotations.loc[index, 'Filename'])
       return path, labelID
 
   def _resample_audio(self, signal, fs):

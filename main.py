@@ -27,6 +27,8 @@ import plotting
 # The directory paths for the audio files
 AUDIO_FILES = Path(os.getcwd(), 'wavfiles')
 ANNOTATIONS = Path(os.getcwd(), 'annotations.csv')
+# Setting wether to run plots or not
+PLOTTING = True
 
 # Create annotations file if not already created for the dataset
 # or load in the annotations csv file
@@ -40,4 +42,27 @@ else:
     annotations = pd.read_csv(ANNOTATIONS)
 
 # Plotting the class distribution for the dataset
-plotting.plot_class_distribution(annotations)
+if PLOTTING:
+    plotting.plot_class_distribution(annotations)
+
+# Defining the dataset and dataloader constants
+SAMPLE_RATE = 22050
+NUM_SAMPLES = 22050
+BATCH_SIZE = 128
+
+# Creating a mel spectogram for the feature extraction / transformation
+transformation = torchaudio.transforms.MelSpectrogram(
+    sample_rate=SAMPLE_RATE,
+    n_fft=1024,
+    hop_length=512,
+    n_mels=64
+)
+
+# Defining the device being used
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+logging.info(f"Device available: {device}")
+
+# Creating the dataset and dataloader
+audio_dataset = dataset.AudioDataset(annotations, AUDIO_FILES, device, transformation, SAMPLE_RATE, NUM_SAMPLES)
+data_loader = DataLoader(audio_dataset, batch_size=BATCH_SIZE)
+
