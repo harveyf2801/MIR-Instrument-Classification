@@ -40,7 +40,7 @@ def create_file_annotations(dir):
 class AudioDataset(Dataset):
   ''' Custom Dataset class for audio instrument classification '''
 
-  def __init__(self, annotations, audio_dir, device, transformation, transform_fs, num_samples):
+  def __init__(self, annotations, audio_dir, device, transformations, transform_fs, num_samples):
     '''
     Parameters -
         annotations: the annotations for the dataset
@@ -57,7 +57,7 @@ class AudioDataset(Dataset):
     # Defining attributes
     self.audio_dir = audio_dir
     self.device = device
-    self.transformation = transformation.to(self.device) # putting the data onto a cuda device is available
+    self.transformations = transformations.to(self.device) # putting the data onto a cuda device if available
     self.transform_fs = transform_fs
     self.num_samples = num_samples
 
@@ -80,9 +80,9 @@ class AudioDataset(Dataset):
     signal = self._reshape_audio(signal)
 
     # Performs transformation on the device
-    signal = self.transformation(signal)
+    features = self.transformations(signal)
 
-    return signal, labelID
+    return features, labelID
 
   def get_class_labels(self):
     ''' Public method to provide a list of the class labels '''
