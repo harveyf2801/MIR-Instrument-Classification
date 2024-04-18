@@ -1,30 +1,10 @@
 import numpy as np
 import scipy.fftpack as fft
 import pandas as pd
-from scipy.signal import gammatone, lfilter
 
-def envelope(y, fs, threshold):
-	'''
-	Envelope function to define a mask where the audio goes below a threshold.
-
-	Parameters:
-		y (numpy array): The input signal.
-		fs (int): The sampling rate of the signal.
-		threshold (float): The threshold of where the mask will activate.
-	Returns:
-		(list): A mask of boolean values.
-	'''
-	mask = []
-	# Applying the absolute function on the input signal
-	y = pd.Series(y).apply(np.abs)
-	# Getting the rolling average amplitude using windowing
-	y_mean = y.rolling(window=int(fs/16), min_periods=1, center=True).mean()
-	for mean in y_mean:
-		if mean > threshold:
-			mask.append(True)
-		else:
-			mask.append(False)
-	return mask
+from librosa.feature import spectral_flatness, spectral_centroid, spectral_rolloff
+from spafe.features.gfcc import gfcc
+from python_speech_features import logfbank, mfcc, ssc
 
 def calculate_fft(y, fs):
 	'''
@@ -40,3 +20,24 @@ def calculate_fft(y, fs):
 	freqs = np.fft.rfftfreq(n, d=1/fs)
 	Y = abs(np.fft.rfft(y)/n)
 	return (Y, freqs)
+
+# Torch transformation features
+
+class ExtractMFCC(object):
+    """Extract MFCC feature.
+
+    Args:
+        output_size (tuple or int): Desired output size. If int, square crop
+            is made.
+    """
+
+    def __init__(self, fs, numcep, nfilt, nfft):
+        self.fs = fs
+        self.numcep = numcep
+        self.nfilt = nfilt
+        self.nfft = nfft
+
+    def __call__(self, signal):
+        feature = mfcc(signal, self.fs, numcep=self.numcep, nfilt=self.nfilt, nfft=self.nfft)
+
+        return feature

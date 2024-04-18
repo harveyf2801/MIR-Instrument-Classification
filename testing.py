@@ -24,8 +24,6 @@ try:
     from scipy.io import wavfile
 
     import librosa
-    from spafe.features.gfcc import gfcc
-    from python_speech_features import logfbank, mfcc, ssc
 
     import matplotlib.pyplot as plt
 
@@ -48,22 +46,32 @@ C_AUDIO_FILES = Path(PWD, 'clean')
 AUDIO_FILES = Path(PWD, 'wavfiles')
 ANNOTATIONS = Path(PWD, 'annotations.csv')
 
+# Setting audio constants
+SAMPLE_RATE = 22050
+NUM_SAMPLES = 2*SAMPLE_RATE # two seconds of audio
+BATCH_SIZE = 128
+
+WIN_LENGTH = 2**11
+HOP_LENGTH = 2**10
+NCEPS = 13 # 64?
+NFILTS = 26
+
 # Setting whether to run plots or not
 PLOTTING = False
 
 # %% Cleaning the audio files by stripping the silence
 clean_files = os.listdir(C_AUDIO_FILES)
-logging.info("Cleaning the audio files")
-for file in tqdm(clean_files):
-	# Ignoring files already cleaned and all the 'hidden' files (such as .DS_store used for MacOS)
-	if (file in clean_files) or (file[0] == '.'):
-		continue
-	# Loading the audio file at 16000 Hz
-	signal, fs = librosa.load(os.path.join(AUDIO_FILES, file), mono=True, sr=16000)
-	# Getting the mask envelope for the audio
-	mask = feature_extraction.envelope(signal, fs, 0.0005)
-	# Writing this masked and resampled audio into the clean directory
-	wavfile.write(filename=os.path.join(C_AUDIO_FILES, file), rate=fs, data=signal[mask])
+# logging.info("Cleaning the audio files")
+# for file in tqdm(clean_files):
+# 	# Ignoring files already cleaned and all the 'hidden' files (such as .DS_store used for MacOS)
+# 	if (file in clean_files) or (file[0] == '.'):
+# 		continue
+# 	# Loading the audio file at 16000 Hz
+# 	signal, fs = librosa.load(os.path.join(AUDIO_FILES, file), mono=True, sr=SAMPLE_RATE)
+# 	# Getting the mask envelope for the audio
+# 	mask = feature_extraction.envelope(signal, fs, 0.0005)
+# 	# Writing this masked and resampled audio into the clean directory
+# 	wavfile.write(filename=os.path.join(C_AUDIO_FILES, file), rate=fs, data=signal[mask])
 
 # %% Create annotations file if not already created for the dataset
 # or load in the annotations csv file
@@ -79,45 +87,6 @@ else:
 # Plotting the class distribution for the dataset
 if PLOTTING:
     plotting.plot_class_distribution(annotations)
-
-# %% Creating the dataset
-# Defining the dataset and dataloader constants
-SAMPLE_RATE = 22050
-NUM_SAMPLES = 22050
-BATCH_SIZE = 128
-
-WIN_LENGTH = 2**10
-HOP_LENGTH = 2**9
-NMFCC = 13 # 64?
-
-# Creating a mel spectogram for the feature extraction / transformation
-transformations = nn.Sequential(
-    torchaudio.transforms.MelSpectrogram(
-        sample_rate=SAMPLE_RATE,
-        win_length=WIN_LENGTH,
-        n_fft=WIN_LENGTH,
-        hop_length=HOP_LENGTH,
-        n_mels=64
-    ),
-    torchaudio.transforms.SpectralCentroid(
-        sample_rate=SAMPLE_RATE,
-        n_fft=WIN_LENGTH,
-        win_length=WIN_LENGTH,
-        hop_length=HOP_LENGTH,
-        window_fn=torch.hann_window
-    )
-)
-scripted_transforms = torch.jit.script(transformations)
-
-# Defining the device being used
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-logging.info(f"Device available: {str(device).upper()}")
-
-# Creating the dataset and dataloader
-# audio_dataset = dataset.AudioDataset(annotations, AUDIO_FILES, device, scripted_transforms, SAMPLE_RATE, NUM_SAMPLES)
-# data_loader = DataLoader(audio_dataset, batch_size=BATCH_SIZE)
-
-# print(audio_dataset[0])
 
 # %% 
 
@@ -141,25 +110,37 @@ for c in classes:
   signal, fs = librosa.load(os.path.join(C_AUDIO_FILES, wav_file), mono=True, sr=None)
   signals[c] = signal
   fft[c] = feature_extraction.calculate_fft(signal, fs)
-  scs[c] = librosa.feature.spectral_centroid(y=signal, sr=fs)[0]
-  srs[c] = librosa.feature.spectral_rolloff(y=signal+0.01, sr=fs)[0]
-  sfs[c] = librosa.feature.spectral_flatness(y=signal).T
-  fbank[c] = logfbank(signal[:fs], fs, nfilt=26, nfft=1103).T
-  mfccs[c] = mfcc(signal[:fs], fs, numcep=NMFCC, nfilt=26, nfft=1103).T
-  gfccs[c] = gfcc(signal[:fs], fs, num_ceps=NMFCC, nfilts=26, nfft=1103).T
+  scs[c] = feature_extraction.spectral_centroid(y=signal, sr=fs)[0]
+  srs[c] = feature_extraction.spectral_rolloff(y=signal+0.01, sr=fs)[0]
+  sfs[c] = feature_extraction.spectral_flatness(y=signal).T
+  fbank[c] = feature_extraction.logfbank(signal[:fs], fs, nfilt=NFILTS, nfft=WIN_LENGTH).T
+  mfccs[c] = feature_extraction.mfcc(signal[:fs], fs, numcep=NCEPS, nfilt=NFILTS, nfft=WIN_LENGTH).T
+  gfccs[c] = feature_extraction.gfcc(signal[:fs], fs, num_ceps=NCEPS, nfilts=NFILTS, nfft=WIN_LENGTH).T
   # COULD ADD zerocrossing HERE
 
 # Plotting the feature extractions of the audio
-if not PLOTTING:
+if PLOTTING:
     plotting.plot_signals_time(signals)
     plotting.plot_ffts(fft)
     plotting.plot_spectral_feature(scs, 'Centroid')
     plotting.plot_spectral_feature(srs, 'Rolloff')
     plotting.plot_spectral_feature(sfs, 'Flatness')
-    plotting.plot_fbanks(fbank)
-    plotting.plot_mfccs(mfccs)
-    plotting.plot_mfccs(gfccs)
+    plotting.plot_spectrogram(fbank, 'Filter Bank')
+    plotting.plot_spectrogram(mfccs, 'MFCC')
+    plotting.plot_spectrogram(gfccs, 'GFCC')
 
-# %%
+# %% Creating the dataset
 
-# %%
+# Creating a mel spectogram for the feature extraction / transformation
+
+# Defining the device being used
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+logging.info(f"Device available: {str(device).upper()}")
+
+transforms = feature_extraction.ExtractMFCC(SAMPLE_RATE, NCEPS, NFILTS, WIN_LENGTH)
+
+# Creating the dataset and dataloader
+audio_dataset = dataset.AudioDataset(annotations, AUDIO_FILES, device, transforms, SAMPLE_RATE, NUM_SAMPLES)
+data_loader = DataLoader(audio_dataset, batch_size=BATCH_SIZE)
+
+# print(audio_dataset[0])

@@ -52,7 +52,7 @@ def plot_spectral_feature(signals, title):
 
 	Parameters:
 		signals (dict): The input signals in a list.
-		title (str): The title of the spectral feature i.e. 'flatness' or 'centroid'.
+		title (str): The title of the spectral feature i.e. 'flatness' or 'centroid' etc.
 	'''
 
 	ncols = len(signals)
@@ -100,23 +100,26 @@ def plot_ffts(signals):
 		ax[y].plot(freq, Y)
 		ax[y].set_xticks([])
 		ax[y].set_yticks([])
+		ax[y].set_xlabel('Frequency')
+		ax[y].set_ylabel('Magnitude')
 		ax[y].grid(False)
 		z += 1
 	
 	plt.tight_layout()
 	plt.show()
 
-def plot_fbanks(signals):
+def plot_spectrogram(signals, title):
 	'''
-	Plots the Filter Bank spectrogram of the signals.
+	Plots the Spectrogram of the signals.
 
 	Parameters:
 		signals (dict): The input signals in a list.
+		title (str): The title of the feature i.e. 'Filter Bank' or 'MFCC's' etc.
 	'''
 	
 	ncols = len(signals)
 	fig, ax = plt.subplots(1, ncols, figsize=(16, 3))
-	fig.suptitle("Filter Bank Coeffs", size=16)
+	fig.suptitle(title, size=16)
 
 	z = 0
 	for y in range(ncols):
@@ -125,6 +128,8 @@ def plot_fbanks(signals):
 						cmap='hot', interpolation='nearest')
 		ax[y].set_xticks([])
 		ax[y].set_yticks([])
+		ax[y].set_xlabel('Time')
+		ax[y].set_ylabel('Frequency')
 		ax[y].grid(False)
 		z += 1
 	
