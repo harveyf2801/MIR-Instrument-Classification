@@ -20,7 +20,8 @@ packages = [
     'scipy',
     'librosa',
     'matplotlib',
-    'python_speech_features'
+    'python_speech_features',
+    'spafe'
 ]
 
 def run(python='python3', pip='pip3'):

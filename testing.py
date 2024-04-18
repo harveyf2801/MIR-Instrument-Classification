@@ -4,6 +4,8 @@
 # * This uses pip install so if your using anaconda
 #   you will have to look at setup.packages to see what
 #   packages are required.
+import spafe.features
+import spafe.features.gfcc
 import setup
 import os
 from pathlib import Path
@@ -22,6 +24,7 @@ try:
     from scipy.io import wavfile
 
     import librosa
+    from spafe.features.gfcc import gfcc
     from python_speech_features import logfbank, mfcc, ssc
 
     import matplotlib.pyplot as plt
@@ -123,6 +126,7 @@ signals = {}
 fft = {}
 fbank = {}
 mfccs = {}
+gfccs = {}
 scs = {}
 sfs = {}
 srs = {}
@@ -141,20 +145,21 @@ for c in classes:
   srs[c] = librosa.feature.spectral_rolloff(y=signal+0.01, sr=fs)[0]
   sfs[c] = librosa.feature.spectral_flatness(y=signal).T
   fbank[c] = logfbank(signal[:fs], fs, nfilt=26, nfft=1103).T
-  mfccs[c] = mfcc(signal[:fs], fs, numcep=13, nfilt=26, nfft=1103).T
-  # COULD ADD GFCC HERE
+  mfccs[c] = mfcc(signal[:fs], fs, numcep=NMFCC, nfilt=26, nfft=1103).T
+  gfccs[c] = gfcc(signal[:fs], fs, num_ceps=NMFCC, nfilts=26, nfft=1103).T
+  # COULD ADD zerocrossing HERE
 
 # Plotting the feature extractions of the audio
 if not PLOTTING:
     plotting.plot_signals_time(signals)
+    plotting.plot_ffts(fft)
     plotting.plot_spectral_feature(scs, 'Centroid')
     plotting.plot_spectral_feature(srs, 'Rolloff')
     plotting.plot_spectral_feature(sfs, 'Flatness')
-    plotting.plot_ffts(fft)
     plotting.plot_fbanks(fbank)
     plotting.plot_mfccs(mfccs)
+    plotting.plot_mfccs(gfccs)
 
 # %%
-print(mfccs['cello'].shape)
 
 # %%
