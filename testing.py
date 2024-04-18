@@ -45,7 +45,7 @@ C_AUDIO_FILES = Path(PWD, 'clean')
 AUDIO_FILES = Path(PWD, 'wavfiles')
 ANNOTATIONS = Path(PWD, 'annotations.csv')
 
-# Setting wether to run plots or not
+# Setting whether to run plots or not
 PLOTTING = False
 
 # %% Cleaning the audio files by stripping the silence
@@ -111,10 +111,10 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logging.info(f"Device available: {str(device).upper()}")
 
 # Creating the dataset and dataloader
-audio_dataset = dataset.AudioDataset(annotations, AUDIO_FILES, device, scripted_transforms, SAMPLE_RATE, NUM_SAMPLES)
-data_loader = DataLoader(audio_dataset, batch_size=BATCH_SIZE)
+# audio_dataset = dataset.AudioDataset(annotations, AUDIO_FILES, device, scripted_transforms, SAMPLE_RATE, NUM_SAMPLES)
+# data_loader = DataLoader(audio_dataset, batch_size=BATCH_SIZE)
 
-print(audio_dataset[0])
+# print(audio_dataset[0])
 
 # %% 
 
@@ -123,7 +123,10 @@ signals = {}
 fft = {}
 fbank = {}
 mfccs = {}
-sscs = {}
+scs = {}
+sfs = {}
+srs = {}
+afte = {}
 
 # Getting all the unique class labels
 classes = list(np.unique(annotations.ClassLabel))
@@ -134,26 +137,23 @@ for c in classes:
   signal, fs = librosa.load(os.path.join(C_AUDIO_FILES, wav_file), mono=True, sr=None)
   signals[c] = signal
   fft[c] = feature_extraction.calculate_fft(signal, fs)
+  scs[c] = librosa.feature.spectral_centroid(y=signal, sr=fs)[0]
+  srs[c] = librosa.feature.spectral_rolloff(y=signal+0.01, sr=fs)[0]
+  sfs[c] = librosa.feature.spectral_flatness(y=signal).T
   fbank[c] = logfbank(signal[:fs], fs, nfilt=26, nfft=1103).T
   mfccs[c] = mfcc(signal[:fs], fs, numcep=13, nfilt=26, nfft=1103).T
-  sscs[c] = librosa.feature.spectral_centroid(y=signal[:fs], sr=fs, n_fft=1103)
 
 # Plotting the feature extractions of the audio
-plotting.plot_signals_time(signals)
-plt.show()
+if not PLOTTING:
+    plotting.plot_signals_time(signals)
+    plotting.plot_spectral_feature(scs, 'Centroid')
+    plotting.plot_spectral_feature(srs, 'Rolloff')
+    plotting.plot_spectral_feature(sfs, 'Flatness')
+    plotting.plot_ffts(fft)
+    plotting.plot_fbanks(fbank)
+    plotting.plot_mfccs(mfccs)
 
-plotting.plot_ffts(fft)
-plt.show()
-
-plotting.plot_fbanks(fbank)
-plt.show()
-
-plotting.plot_mfccs(mfccs)
-plt.show()
-
-plotting.plot_fbanks(sscs)
-plt.show()
-
-print(sscs['cello'][0].shape)
+# %%
+print(mfccs['cello'].shape)
 
 # %%

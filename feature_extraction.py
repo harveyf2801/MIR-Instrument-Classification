@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.fftpack as fft
 import pandas as pd
+from scipy.signal import gammatone, lfilter
 
 def envelope(y, fs, threshold):
 	'''
