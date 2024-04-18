@@ -133,14 +133,17 @@ if PLOTTING:
 
 # Creating a mel spectogram for the feature extraction / transformation
 
-# Defining the device being used
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-logging.info(f"Device available: {str(device).upper()}")
-
 transforms = feature_extraction.ExtractMFCC(SAMPLE_RATE, NCEPS, NFILTS, WIN_LENGTH)
 
 # Creating the dataset and dataloader
-audio_dataset = dataset.AudioDataset(annotations, AUDIO_FILES, device, transforms, SAMPLE_RATE, NUM_SAMPLES)
+audio_dataset = dataset.AudioDataset(annotations, AUDIO_FILES, transforms, SAMPLE_RATE, NUM_SAMPLES)
 data_loader = DataLoader(audio_dataset, batch_size=BATCH_SIZE)
 
-# print(audio_dataset[0])
+signal, fs = librosa.load(os.path.join(AUDIO_FILES, 'cello-01.wav'))
+
+test = {}
+for i, c in enumerate(classes):
+    feature, classID = audio_dataset[i]
+    test[c] = feature
+
+plotting.plot_spectrogram(test, 'MFCC')

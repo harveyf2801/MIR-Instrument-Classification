@@ -41,13 +41,12 @@ def create_file_annotations(dir):
 class AudioDataset(Dataset):
     ''' Custom Dataset class for audio instrument classification '''
 
-    def __init__(self, annotations, audio_dir, device, transformations, transform_fs, num_samples):
+    def __init__(self, annotations, audio_dir, transformations, transform_fs, num_samples):
         '''
         Parameters -
             annotations: the annotations for the dataset
                         these annotations should have the filename at index 0 and class ID at -1
             audio_dir:       the path to the audio dataset directory
-            device:          the device in use (cuda or cpu)
             transformation:  provides the function for performing preprocessing on the data
             transform_fs:    the samplerate to resample at
             num_samples:     the length n of samples to cut / pad the data to
@@ -57,8 +56,7 @@ class AudioDataset(Dataset):
 
         # Defining attributes
         self.audio_dir = audio_dir
-        self.device = device
-        self.transformations = transformations.to(self.device) # putting the data onto a cuda device if available
+        self.transformations = transformations # putting the data onto a cuda device if available
         self.transform_fs = transform_fs
         self.num_samples = num_samples
 
@@ -74,15 +72,15 @@ class AudioDataset(Dataset):
 
         # Loads the audio input to the device
         signal, fs = torchaudio.load(audio_sample_path, normalize=True)
-        signal = signal.to(self.device)
 
         # Resamples and reshapes the audio
         signal = self._resample_audio(signal, fs)
         signal = self._reshape_audio(signal)
+
         signal = self._envelope_audio(signal, self.transform_fs, 0.0005)
 
         # Performs transformation on the device
-        features = self.transformations(signal)
+        features = torch.from_numpy(self.transformations(signal))
 
         return features, labelID
 
@@ -93,7 +91,7 @@ class AudioDataset(Dataset):
     def _get_audio_sample_path_and_label(self, index):
         ''' Private get method for the sample path location
                         and prediction labelID            '''
-        label = self.annotations.loc[index, 'ClassLabel']
+        # label = self.annotations.loc[index, 'ClassLabel']
         labelID = self.annotations.loc[index, 'ClassID']
         path = Path(self.audio_dir, self.annotations.loc[index, 'Filename'])
         return path, labelID
@@ -101,7 +99,7 @@ class AudioDataset(Dataset):
     def _resample_audio(self, signal, fs):
         # Resample the audio signal if needed
         if fs != self.transform_fs:
-            resampler = torchaudio.transforms.Resample(fs, self.transform_fs).to(self.device)
+            resampler = torchaudio.transforms.Resample(fs, self.transform_fs)
             signal = resampler(signal)
         return signal
 
@@ -130,17 +128,17 @@ class AudioDataset(Dataset):
         Returns:
             signal (numpy array): The enveloped signal.
         '''
-        mask = []
-        # Applying the absolute function on the input signal
-        y = pd.Series(y).apply(np.abs)
-        # Getting the rolling average amplitude using windowing
-        y_mean = y.rolling(window=int(fs/16), min_periods=1, center=True).mean()
-        for mean in y_mean:
-            if mean > threshold:
-                mask.append(True)
-            else:
-                mask.append(False)
+        window = int(fs/16)
         
-        return signal[mask]
+        # Applying the absolute function on the input signal
+        y = np.abs(signal[0].numpy())
+
+        # Getting the rolling average amplitude using windowing
+        y_mean = np.convolve(y, np.ones(window), 'same') / window
+        mask = np.array(y_mean > threshold)
+        
+        signal = signal[:, mask]
+
+        return signal
 
 

@@ -1,6 +1,5 @@
 import numpy as np
-import scipy.fftpack as fft
-import pandas as pd
+import torch
 
 from librosa.feature import spectral_flatness, spectral_centroid, spectral_rolloff
 from spafe.features.gfcc import gfcc
@@ -38,6 +37,5 @@ class ExtractMFCC(object):
         self.nfft = nfft
 
     def __call__(self, signal):
-        feature = mfcc(signal, self.fs, numcep=self.numcep, nfilt=self.nfilt, nfft=self.nfft)
-
+        feature = mfcc(signal, self.fs, numcep=self.numcep, nfilt=self.nfilt, nfft=self.nfft).T
         return feature
