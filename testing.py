@@ -142,6 +142,7 @@ for c in classes:
   sfs[c] = librosa.feature.spectral_flatness(y=signal).T
   fbank[c] = logfbank(signal[:fs], fs, nfilt=26, nfft=1103).T
   mfccs[c] = mfcc(signal[:fs], fs, numcep=13, nfilt=26, nfft=1103).T
+  # COULD ADD GFCC HERE
 
 # Plotting the feature extractions of the audio
 if not PLOTTING:
