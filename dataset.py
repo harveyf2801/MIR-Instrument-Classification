@@ -75,9 +75,9 @@ class AudioDataset(Dataset):
 
         # Resamples and reshapes the audio
         signal = self._resample_audio(signal, fs)
-        signal = self._reshape_audio(signal)
-
+        signal = self._convert_to_mono(signal)
         signal = self._envelope_audio(signal, self.transform_fs, 0.0005)
+        signal = self._reshape_audio(signal)
 
         # Performs transformation on the device
         features = torch.from_numpy(self.transformations(signal[0].numpy()))
@@ -103,11 +103,14 @@ class AudioDataset(Dataset):
             signal = resampler(signal)
         return signal
 
-    def _reshape_audio(self, signal):
+    def _convert_to_mono(self, signal):
         # Convert the signal to mono if needed
         if signal.shape[0] > 1:
             signal = torch.mean(signal, dim=0, keepdim=True)
+            
+        return signal
 
+    def _reshape_audio(self, signal):
         # Cut the signal if needed
         if signal.shape[1] > self.num_samples:
             signal = signal[:, :self.num_samples]

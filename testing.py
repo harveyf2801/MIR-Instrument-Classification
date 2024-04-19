@@ -19,8 +19,6 @@ try:
 
     import pandas as pd
     import numpy as np
-    from scipy.io import wavfile
-
     import librosa
 
     import matplotlib.pyplot as plt
@@ -59,7 +57,7 @@ HOP_LENGTH = 2**10
 NCEPS = 13 # 64?
 NFILTS = 26
 
-BATCH_SIZE = 199
+BATCH_SIZE = 32
 K_FOLDS = 5
 
 # Setting whether to run plots or not
@@ -150,6 +148,22 @@ if PLOTTING:
 
 # del tmp_signals, tmp_fft, tmp_fbank, tmp_mfccs, tmp_gfccs, tmp_scs, tmp_sfs, tmp_srs
 
+print(tmp_mfccs['cello'].shape)
+# Calculate the mean and standard deviation across the mfcc cello feature
+mfcc_cello = tmp_mfccs['cello']
+mfcc_cello_mean = np.mean(mfcc_cello)
+mfcc_cello_std = np.std(mfcc_cello)
+print("Mean:", mfcc_cello_mean)
+print("Standard Deviation:", mfcc_cello_std)
+
+x = [4, 5, 10, 4, 3, 11, 14 , 8, 10, 12]
+y = [21, 19, 24, 17, 16, 25, 24, 22, 21, 21]
+classes = [0, 0, 1, 0, 0, 1, 1, 0, 1, 1]
+
+plt.scatter(x, y, c=classes)
+plt.show()
+
+exit()
 # %% Creating a kNN model using PCA and t-SNE for dimensionality reduction
 
 kf = KFold(n_splits=K_FOLDS, shuffle=True)
@@ -173,7 +187,9 @@ for fold, (train_idx, test_idx) in enumerate(kf.split(audio_dataset)):
 
     # Train the model on the current fold
     for data, target in test_loader:
+        print(data.shape)
         print(target)
     
     for data, target in test_loader:
+        print(data.shape)
         print(target)
