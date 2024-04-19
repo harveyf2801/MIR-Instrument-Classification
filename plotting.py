@@ -45,9 +45,9 @@ def normalize(x, axis=0):
 	# Function that normalizes the Sound Data
     return preprocessing.minmax_scale(x, axis=axis)
 
-def plot_spectral_feature(signals, title):
+def plot_time_feature(signals, title):
 	'''
-	Plots spectral features of the signals.
+	Plots time based features of the signals.
 	Such as spectral centroid, spectral flatness, and spectral roll-off.
 
 	Parameters:
@@ -57,7 +57,7 @@ def plot_spectral_feature(signals, title):
 
 	ncols = len(signals)
 	fig, ax = plt.subplots(1, ncols, figsize=(16, 3))
-	fig.suptitle(f'Spectral {title}', size=16)
+	fig.suptitle(title, size=16)
 
 	z = 0
 	for y in range(ncols):
@@ -130,31 +130,6 @@ def plot_spectrogram(signals, title):
 		ax[y].set_yticks([])
 		ax[y].set_xlabel('Time')
 		ax[y].set_ylabel('Frequency')
-		ax[y].grid(False)
-		z += 1
-	
-	plt.tight_layout()
-	plt.show()
-
-def plot_mfccs(signals):
-	'''
-	Plots the Mel Frequency Cepstrum of the signals.
-	
-	Parameters:
-		signals (dict): The input signals in a list.
-	'''
-	
-	ncols = len(signals)
-	fig, ax = plt.subplots(1, ncols, figsize=(16, 3))
-	fig.suptitle("Mel Frequency Cepstrum Coeffs", size=16)
-	
-	z = 0
-	for y in range(ncols):
-		ax[y].set_title((list(signals.keys())[z]).capitalize())
-		ax[y].imshow(list(signals.values())[z],
-						cmap='hot', interpolation='nearest')
-		ax[y].set_xticks([])
-		ax[y].set_yticks([])
 		ax[y].grid(False)
 		z += 1
 	

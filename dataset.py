@@ -80,7 +80,7 @@ class AudioDataset(Dataset):
         signal = self._envelope_audio(signal, self.transform_fs, 0.0005)
 
         # Performs transformation on the device
-        features = torch.from_numpy(self.transformations(signal))
+        features = torch.from_numpy(self.transformations(signal[0].numpy()))
 
         return features, labelID
 

@@ -4,8 +4,6 @@
 # * This uses pip install so if your using anaconda
 #   you will have to look at setup.packages to see what
 #   packages are required.
-import spafe.features
-import spafe.features.gfcc
 import setup
 import os
 from pathlib import Path
@@ -29,6 +27,12 @@ try:
 
     from tqdm import tqdm
 
+    from sklearn.decomposition import PCA
+    from sklearn.manifold import TSNE
+    from sklearn.neighbors import KNeighborsClassifier
+    from sklearn.pipeline import Pipeline
+    from sklearn.model_selection import KFold
+
     # Custom modules
     import dataset
     import plotting
@@ -46,15 +50,17 @@ C_AUDIO_FILES = Path(PWD, 'clean')
 AUDIO_FILES = Path(PWD, 'wavfiles')
 ANNOTATIONS = Path(PWD, 'annotations.csv')
 
-# Setting audio constants
+# Setting audio and model constants
 SAMPLE_RATE = 22050
 NUM_SAMPLES = 2*SAMPLE_RATE # two seconds of audio
-BATCH_SIZE = 128
 
 WIN_LENGTH = 2**11
 HOP_LENGTH = 2**10
 NCEPS = 13 # 64?
 NFILTS = 26
+
+BATCH_SIZE = 199
+K_FOLDS = 5
 
 # Setting whether to run plots or not
 PLOTTING = False
@@ -88,62 +94,86 @@ else:
 if PLOTTING:
     plotting.plot_class_distribution(annotations)
 
-# %% 
+# %% Creating the dataset
+
+# Creating a mel spectogram for the feature extraction / transformation
+transforms = feature_extraction.ExtractMFCC(SAMPLE_RATE, NCEPS, NFILTS, WIN_LENGTH)
+
+# Other features can be used such as the GFCC, FBank, Spectral (Centroid, Rolloff, Flatness), etc.
+
+# Creating the dataset
+# This dataset performs pre-processing on the audio files
+# such as resampling, resizing (to mono), normalization, and feature extraction
+audio_dataset = dataset.AudioDataset(annotations, AUDIO_FILES, transforms, SAMPLE_RATE, NUM_SAMPLES)
+
+# %% Displaying each feature extraction for the first audio file in each class
 
 # Creating dictionaries to hold the data and the corresponding class label as a key
-signals = {}
-fft = {}
-fbank = {}
-mfccs = {}
-gfccs = {}
-scs = {}
-sfs = {}
-srs = {}
-afte = {}
+tmp_signals = {}
+tmp_fft = {}
+tmp_zcs = {}
+tmp_fbank = {}
+tmp_mfccs = {}
+tmp_gfccs = {}
+tmp_scs = {}
+tmp_sfs = {}
+tmp_srs = {}
 
 # Getting all the unique class labels
 classes = list(np.unique(annotations.ClassLabel))
 
 # Iterating through the classes and selecting the first signal from each to extract features
 for c in classes:
-  wav_file = annotations[annotations.ClassLabel == c].iloc[0, 0]
-  signal, fs = librosa.load(os.path.join(C_AUDIO_FILES, wav_file), mono=True, sr=None)
-  signals[c] = signal
-  fft[c] = feature_extraction.calculate_fft(signal, fs)
-  scs[c] = feature_extraction.spectral_centroid(y=signal, sr=fs)[0]
-  srs[c] = feature_extraction.spectral_rolloff(y=signal+0.01, sr=fs)[0]
-  sfs[c] = feature_extraction.spectral_flatness(y=signal).T
-  fbank[c] = feature_extraction.logfbank(signal[:fs], fs, nfilt=NFILTS, nfft=WIN_LENGTH).T
-  mfccs[c] = feature_extraction.mfcc(signal[:fs], fs, numcep=NCEPS, nfilt=NFILTS, nfft=WIN_LENGTH).T
-  gfccs[c] = feature_extraction.gfcc(signal[:fs], fs, num_ceps=NCEPS, nfilts=NFILTS, nfft=WIN_LENGTH).T
-  # COULD ADD zerocrossing HERE
+    wav_file = annotations[annotations.ClassLabel == c].iloc[0, 0]
+    signal, fs = librosa.load(os.path.join(C_AUDIO_FILES, wav_file), mono=True, sr=None)
+    tmp_signals[c] = signal
+    tmp_fft[c] = feature_extraction.calculate_fft(signal, fs)
+    tmp_zcs[c] = feature_extraction.zero_crossing_rate(signal).T
+    tmp_scs[c] = feature_extraction.spectral_centroid(y=signal, sr=fs).T
+    tmp_srs[c] = feature_extraction.spectral_rolloff(y=signal+0.01, sr=fs).T
+    tmp_sfs[c] = feature_extraction.spectral_flatness(y=signal).T
+    tmp_fbank[c] = feature_extraction.logfbank(signal[:fs], fs, nfilt=NFILTS, nfft=WIN_LENGTH).T
+    tmp_mfccs[c] = feature_extraction.mfcc(signal[:fs], fs, numcep=NCEPS, nfilt=NFILTS, nfft=WIN_LENGTH).T
+    tmp_gfccs[c] = feature_extraction.gfcc(signal[:fs], fs, num_ceps=NCEPS, nfilts=NFILTS, nfft=WIN_LENGTH).T
 
 # Plotting the feature extractions of the audio
 if PLOTTING:
-    plotting.plot_signals_time(signals)
-    plotting.plot_ffts(fft)
-    plotting.plot_spectral_feature(scs, 'Centroid')
-    plotting.plot_spectral_feature(srs, 'Rolloff')
-    plotting.plot_spectral_feature(sfs, 'Flatness')
-    plotting.plot_spectrogram(fbank, 'Filter Bank')
-    plotting.plot_spectrogram(mfccs, 'MFCC')
-    plotting.plot_spectrogram(gfccs, 'GFCC')
+    plotting.plot_signals_time(tmp_signals)
+    plotting.plot_ffts(tmp_fft)
+    plotting.plot_time_feature(tmp_zcs, 'Zero Crossing Rate')
+    plotting.plot_time_feature(tmp_scs, 'Spectral Centroid')
+    plotting.plot_time_feature(tmp_srs, 'Spectral Rolloff')
+    plotting.plot_time_feature(tmp_sfs, 'Spectral Flatness')
+    plotting.plot_spectrogram(tmp_fbank, 'Filter Bank')
+    plotting.plot_spectrogram(tmp_mfccs, 'MFCC')
+    plotting.plot_spectrogram(tmp_gfccs, 'GFCC')
 
-# %% Creating the dataset
+# del tmp_signals, tmp_fft, tmp_fbank, tmp_mfccs, tmp_gfccs, tmp_scs, tmp_sfs, tmp_srs
 
-# Creating a mel spectogram for the feature extraction / transformation
+# %% Creating a kNN model using PCA and t-SNE for dimensionality reduction
 
-transforms = feature_extraction.ExtractMFCC(SAMPLE_RATE, NCEPS, NFILTS, WIN_LENGTH)
+kf = KFold(n_splits=K_FOLDS, shuffle=True)
 
-# Creating the dataset and dataloader
-audio_dataset = dataset.AudioDataset(annotations, AUDIO_FILES, transforms, SAMPLE_RATE, NUM_SAMPLES)
-data_loader = DataLoader(audio_dataset, batch_size=BATCH_SIZE)
+# Loop through each fold
+for fold, (train_idx, test_idx) in enumerate(kf.split(audio_dataset)):
+    print(f"Fold {fold + 1}")
+    print("-------")
 
-signal, fs = librosa.load(os.path.join(AUDIO_FILES, 'cello-01.wav'))
+    # Define the data loaders for the current fold
+    train_loader = DataLoader(
+        dataset=audio_dataset,
+        batch_size=BATCH_SIZE,
+        sampler=torch.utils.data.SubsetRandomSampler(train_idx),
+    )
+    test_loader = DataLoader(
+        dataset=audio_dataset,
+        batch_size=BATCH_SIZE,
+        sampler=torch.utils.data.SubsetRandomSampler(test_idx),
+    )
 
-test = {}
-for i, c in enumerate(classes):
-    feature, classID = audio_dataset[i]
-    test[c] = feature
-
-plotting.plot_spectrogram(test, 'MFCC')
+    # Train the model on the current fold
+    for data, target in test_loader:
+        print(target)
+    
+    for data, target in test_loader:
+        print(target)
