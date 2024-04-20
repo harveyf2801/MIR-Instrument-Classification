@@ -40,6 +40,7 @@ except ModuleNotFoundError:
 PWD = os.getcwd()
 AUDIO_FILES = Path(PWD, 'wavfiles')
 ANNOTATIONS = Path(PWD, 'annotations.csv')
+FEATURES = Path(PWD, 'features.csv')
 
 # Setting audio and model constants
 SAMPLE_RATE = 22050
@@ -131,55 +132,64 @@ if PLOTTING:
 import data_anaysis
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import KFold
+from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE
+from sklearn.manifold import TSNE, Isomap, LocallyLinearEmbedding
 
-# # Create a pandas DataFrame to hold the features
-# features_df = pd.DataFrame()
-
-# # Iterate through the dataset and calculate the mean of each feature
-# for i in range(len(audio_dataset)):
-#     data, target = audio_dataset[i]
-
-#     # Calculate the mean along axis 1
-#     mean_feature = np.mean(data.numpy(), axis=1)
-    
-#     # Add the mean feature to the DataFrame
-#     for j, coeff in enumerate(mean_feature):
-#         features_df.at[i, f'MFCC {j+1} avg'] = coeff
-
+# Create a pandas DataFrame to hold the features
 features_df = feature_extraction.export_features(audio_dataset,
                                                  feature_extraction.ExtractMFCC(SAMPLE_RATE, NCEPS, NFILTS, WIN_LENGTH))
 
 # Get the features and standardise them
 features = features_df.iloc[:, :-1].to_numpy()
-targets = features_df[['target']]
+targets = features_df[['target']].to_numpy(dtype=int).flatten()
 
 # Perform PCA
-Y = data_anaysis.perform_PCA(features, 2)
-principalDf = pd.DataFrame(data = Y
-             , columns = ['principal component 1', 'principal component 2'])
-principalDf = pd.concat([principalDf, targets], axis = 1)
+# pca_components = PCA(n_components=2).fit_transform(features)
+features = StandardScaler().fit_transform(features)
+kmeans = KMeans(n_clusters=len(audio_dataset.get_class_labels()), random_state=0).fit(features)
+pca_components = PCA(0.9).fit_transform(features)
+
+# print(pca_components.shape)
+# var_thresh = 95; # 95% of variance explained
+# cum_var = np.cumsum(explained); # cumulative sum of explained variance
+# n_pc = cum_var[cum_var >= var_thresh]
+# print(n_pc)
+
+# isomap_components = Isomap(n_components=2).fit_transform(features)
+# lle_components = LocallyLinearEmbedding(n_components=2).fit_transform(features)
+# tsne_components = TSNE(n_components=2).fit_transform(features)
 
 # Plot the PCA
-if PLOTTING:
-    plt.figure(figsize=(10, 8))
-    targets = list(principalDf['target'].unique())
-    colours = ['r', 'g', 'b', 'c', 'm', 'y', 'k']
+if not PLOTTING:
+    # Plot the results of k-means clustering and PCA
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
 
-    for target, color in zip(targets, colours):
-        indicesToKeep = principalDf['target'] == target
-        plt.scatter(principalDf.loc[indicesToKeep, 'principal component 1'],
-                    principalDf.loc[indicesToKeep, 'principal component 2'],
-                    c=color,
-                    s=50)
+    # Plot the k-means clusters
+    colors = np.array(['r', 'g', 'b', 'c', 'm', 'y', 'k'])
+    ax1.scatter(pca_components[:, 0], pca_components[:, 1], c=colors[kmeans.labels_])
+    ax1.set_title('K-means clustering')
 
-    plt.xlabel('Principal Component 1')
-    plt.ylabel('Principal Component 2')
-    plt.title('PCA Scatter Plot')
-    plt.legend(targets)
+    # Plot the PCA results
+    ax2.scatter(pca_components[:, 0], pca_components[:, 1], c=colors[targets])
+    ax2.set_title('PCA')
+
     plt.show()
 
+    # # Plot the PCA components on a scatter plot for each target
+    # plt.figure(figsize=(10, 6))
+    # targets_unique = targets['target'].unique()
+    # colors = ['r', 'g', 'b', 'c', 'm', 'y', 'k']
+    # for i, target in enumerate(targets_unique):
+    #     indices = targets.index[targets['target'] == target]
+    #     plt.scatter(pca_components[indices, 0], pca_components[indices, 1], c=colors[i], label=target)
+    # plt.xlabel('PCA Component 1')
+    # plt.ylabel('PCA Component 2')
+    # plt.legend()
+    # plt.title('PCA Components')
+    # plt.show()
+
+exit()
 # %% Creating a kNN model using PCA and t-SNE for dimensionality reduction
 
 kf = KFold(n_splits=K_FOLDS, shuffle=True)
@@ -202,7 +212,7 @@ for fold, (train_idx, test_idx) in enumerate(kf.split(audio_dataset)):
     )
 
     # Train the model on the current fold
-    for data, target in test_loader:
+    for data, target in train_loader:
         print(data.shape)
         print(target)
     

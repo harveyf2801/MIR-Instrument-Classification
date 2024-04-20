@@ -142,21 +142,31 @@ def export_features(dataset, feature):
         dataset (AudioDataset): The dataset containing the audio files.
         feature (feature_extraction class): The feature extracted from the audio files.
     """
+
     # Create a pandas DataFrame to hold the features
     features_df = pd.DataFrame()
 
     # Iterate through the dataset and calculate the mean of each feature
     dataset.set_transformations(feature)
 
-    for i in range(len(dataset)):
+    for i in range(int(len(dataset))):
         data, target = dataset[i]
 
         # Calculate the mean along axis 1
         mean_feature = np.mean(data.numpy(), axis=1)
+        # Calculate the standard deviation of the data
+        std_feature = np.std(data.numpy(), axis=1)
+
+        # COULD FLATTEN THE DATA INSTEAD OF TAKING THE MEAN
+        # flatten_feature = data.numpy().flatten()
         
         # Add the mean feature to the DataFrame
         for j, coeff in enumerate(mean_feature):
-            features_df.at[i, f'{feature.name} {j+1} avg'] = coeff
+            features_df.at[i, f'{feature.name} avg {j+1}'] = coeff
+
+        # Add the standard deviation to the DataFrame
+        for j, coeff in enumerate(std_feature):
+            features_df.at[i, f'{feature.name} std {j+1}'] = coeff
 
         # Add the target to the DataFrame
         features_df.at[i, 'target'] = target
