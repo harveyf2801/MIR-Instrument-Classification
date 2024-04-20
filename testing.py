@@ -25,12 +25,6 @@ try:
 
     from tqdm import tqdm
 
-    from sklearn.decomposition import PCA
-    from sklearn.manifold import TSNE
-    from sklearn.neighbors import KNeighborsClassifier
-    from sklearn.pipeline import Pipeline
-    from sklearn.model_selection import KFold
-
     # Custom modules
     import dataset
     import plotting
@@ -44,7 +38,6 @@ except ModuleNotFoundError:
 # %% Setting global constants
 # The directory paths for the audio files
 PWD = os.getcwd()
-C_AUDIO_FILES = Path(PWD, 'clean')
 AUDIO_FILES = Path(PWD, 'wavfiles')
 ANNOTATIONS = Path(PWD, 'annotations.csv')
 
@@ -62,20 +55,6 @@ K_FOLDS = 5
 
 # Setting whether to run plots or not
 PLOTTING = False
-
-# %% Cleaning the audio files by stripping the silence
-clean_files = os.listdir(C_AUDIO_FILES)
-# logging.info("Cleaning the audio files")
-# for file in tqdm(clean_files):
-# 	# Ignoring files already cleaned and all the 'hidden' files (such as .DS_store used for MacOS)
-# 	if (file in clean_files) or (file[0] == '.'):
-# 		continue
-# 	# Loading the audio file at 16000 Hz
-# 	signal, fs = librosa.load(os.path.join(AUDIO_FILES, file), mono=True, sr=SAMPLE_RATE)
-# 	# Getting the mask envelope for the audio
-# 	mask = feature_extraction.envelope(signal, fs, 0.0005)
-# 	# Writing this masked and resampled audio into the clean directory
-# 	wavfile.write(filename=os.path.join(C_AUDIO_FILES, file), rate=fs, data=signal[mask])
 
 # %% Create annotations file if not already created for the dataset
 # or load in the annotations csv file
@@ -123,7 +102,7 @@ classes = list(np.unique(annotations.ClassLabel))
 # Iterating through the classes and selecting the first signal from each to extract features
 for c in classes:
     wav_file = annotations[annotations.ClassLabel == c].iloc[0, 0]
-    signal, fs = librosa.load(os.path.join(C_AUDIO_FILES, wav_file), mono=True, sr=None)
+    signal, fs = librosa.load(os.path.join(AUDIO_FILES, wav_file), mono=True, sr=None)
     tmp_signals[c] = signal
     tmp_fft[c] = feature_extraction.calculate_fft(signal, fs)
     tmp_zcs[c] = feature_extraction.zero_crossing_rate(signal).T
@@ -148,22 +127,59 @@ if PLOTTING:
 
 # del tmp_signals, tmp_fft, tmp_fbank, tmp_mfccs, tmp_gfccs, tmp_scs, tmp_sfs, tmp_srs
 
-print(tmp_mfccs['cello'].shape)
-# Calculate the mean and standard deviation across the mfcc cello feature
-mfcc_cello = tmp_mfccs['cello']
-mfcc_cello_mean = np.mean(mfcc_cello)
-mfcc_cello_std = np.std(mfcc_cello)
-print("Mean:", mfcc_cello_mean)
-print("Standard Deviation:", mfcc_cello_std)
+# %% Performing PCA
+import data_anaysis
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import KFold
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 
-x = [4, 5, 10, 4, 3, 11, 14 , 8, 10, 12]
-y = [21, 19, 24, 17, 16, 25, 24, 22, 21, 21]
-classes = [0, 0, 1, 0, 0, 1, 1, 0, 1, 1]
+# # Create a pandas DataFrame to hold the features
+# features_df = pd.DataFrame()
 
-plt.scatter(x, y, c=classes)
-plt.show()
+# # Iterate through the dataset and calculate the mean of each feature
+# for i in range(len(audio_dataset)):
+#     data, target = audio_dataset[i]
 
-exit()
+#     # Calculate the mean along axis 1
+#     mean_feature = np.mean(data.numpy(), axis=1)
+    
+#     # Add the mean feature to the DataFrame
+#     for j, coeff in enumerate(mean_feature):
+#         features_df.at[i, f'MFCC {j+1} avg'] = coeff
+
+features_df = feature_extraction.export_features(audio_dataset,
+                                                 feature_extraction.ExtractMFCC(SAMPLE_RATE, NCEPS, NFILTS, WIN_LENGTH))
+
+# Get the features and standardise them
+features = features_df.iloc[:, :-1].to_numpy()
+targets = features_df[['target']]
+
+# Perform PCA
+Y = data_anaysis.perform_PCA(features, 2)
+principalDf = pd.DataFrame(data = Y
+             , columns = ['principal component 1', 'principal component 2'])
+principalDf = pd.concat([principalDf, targets], axis = 1)
+
+# Plot the PCA
+if PLOTTING:
+    plt.figure(figsize=(10, 8))
+    targets = list(principalDf['target'].unique())
+    colours = ['r', 'g', 'b', 'c', 'm', 'y', 'k']
+
+    for target, color in zip(targets, colours):
+        indicesToKeep = principalDf['target'] == target
+        plt.scatter(principalDf.loc[indicesToKeep, 'principal component 1'],
+                    principalDf.loc[indicesToKeep, 'principal component 2'],
+                    c=color,
+                    s=50)
+
+    plt.xlabel('Principal Component 1')
+    plt.ylabel('Principal Component 2')
+    plt.title('PCA Scatter Plot')
+    plt.legend(targets)
+    plt.show()
+
 # %% Creating a kNN model using PCA and t-SNE for dimensionality reduction
 
 kf = KFold(n_splits=K_FOLDS, shuffle=True)

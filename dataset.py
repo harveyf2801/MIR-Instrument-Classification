@@ -84,6 +84,10 @@ class AudioDataset(Dataset):
 
         return features, labelID
 
+    def set_transformations(self, transformations):
+        ''' Public method to set the transformations for the dataset '''
+        self.transformations = transformations
+
     def get_class_labels(self):
         ''' Public method to provide a list of the class labels '''
         return self.annotations['ClassLabel'].unique()
