@@ -21,7 +21,8 @@ packages = [
     'librosa',
     'matplotlib',
     'python_speech_features',
-    'spafe'
+    'spafe',
+    'seaborn'
 ]
 
 def run(python='python3', pip='pip3'):

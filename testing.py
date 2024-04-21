@@ -134,7 +134,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import KFold
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE, Isomap, LocallyLinearEmbedding
+from sklearn.manifold import TSNE, Isomap
 
 # Create a pandas DataFrame to hold the features
 features_df = feature_extraction.export_features(audio_dataset,
