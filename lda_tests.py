@@ -1,7 +1,5 @@
 import os
 import librosa
-import spafe
-import python_speech_features
 import pandas as pd
 import numpy as np
 from sklearn.decomposition import PCA, FastICA
@@ -11,22 +9,16 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from sklearn.manifold import TSNE
-from sklearn.model_selection import KFold
+from sklearn.model_selection import StratifiedKFold
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix
 
-import spafe.features.bfcc
-import spafe.features.gfcc
-import spafe.features.lfcc
-import spafe.features.psrcc
-import spafe.features.spfeats
+import feature_extraction
 
-import data_anaysis
+import dimentionality_reduction
 
 import matplotlib.pyplot as plt
-import spafe.features
-import spafe.features.mfcc
 
 # Path to the folder containing audio files
 audio_folder = "wavfiles"
@@ -48,18 +40,27 @@ for filename in os.listdir(audio_folder):
     padded_audio = librosa.util.fix_length(audio, size=fixed_length)
 
     # Extract MFCC features
-    mfcc = spafe.features.mfcc.mfcc(padded_audio, fs=sr, num_ceps=13, nfilts=26, nfft=2**10)
-    gfcc = spafe.features.gfcc.gfcc(padded_audio, fs=sr, num_ceps=13, nfilts=26, nfft=2**10)
+    
+    spc = feature_extraction.spectral_centroid(y=padded_audio, sr=sr).T
+    spr = feature_extraction.spectral_rolloff(y=padded_audio+0.01, sr=sr).T
+    zcr = feature_extraction.zero_crossing_rate(padded_audio)
+    mfcc = feature_extraction.mfcc(padded_audio, fs=sr, num_ceps=13, nfilts=26, nfft=2**10)
+    gfcc = feature_extraction.gfcc(padded_audio, fs=sr, num_ceps=13, nfilts=26, nfft=2**10)
 
     # Split filename at "-"
     label = filename.split("-")[0]
     
     # Append MFCC features and label to the list
-    mfcc_features.append(np.hstack([mfcc.flatten(), gfcc.flatten()]))
+    mfcc_features.append(np.hstack([spr.mean(), spr.std(),
+                                    zcr.mean(), zcr.std(),
+                                    mfcc.mean(axis=0), mfcc.std(axis=0),
+                                    gfcc.mean(axis=0), gfcc.std(axis=0)]))
     target_labels.append(label)
 
 # Convert the list of MFCC features to a numpy array
 mfcc_features = np.array(mfcc_features)
+
+print('shape of mfcc_features:', mfcc_features.shape)
 
 # Create target IDs based on target labels
 unique_labels = np.unique(target_labels)
@@ -74,15 +75,50 @@ target_ids = np.array([target_id_mapping[label] for label in target_labels])
 scaler = StandardScaler()
 mfcc_features_scaled = scaler.fit_transform(mfcc_features, target_ids)
 
-# Split the data set into training and testing sets
-X_train, X_test, y_train, y_test = train_test_split(mfcc_features_scaled, target_ids, test_size=0.2)
 
 # Apply Linear Discriminant Analysis
-lda = LinearDiscriminantAnalysis()
-X_train = lda.fit_transform(X_train, y_train)
-X_test = lda.transform(X_test)
+import dimentionality_reduction 
 
-tmp_Df = pd.DataFrame(X_train[:, :2], columns=['LDA Component 1','LDA Component 2'])
+def get_score(model, X_train, X_test, y_train, y_test):
+  model.fit(X_train, y_train)
+  y_pred = model.predict(X_test)
+  accuracy = accuracy_score(y_test, y_pred)
+  return accuracy, y_pred
+
+
+# Initialize a list to store the accuracy scores for each fold
+from models import KNNClassifier
+
+k_folds = 7
+kf = StratifiedKFold(n_splits=k_folds)
+scores = {
+  'knn': [],
+  'rf': [],
+  'svc': []
+}
+
+classifiers = {
+  'knn': KNNClassifier(10),
+  'rf': RandomForestClassifier(n_estimators=40),
+  'svc': SVC(gamma=1.0)
+}
+
+for train_index, test_index in kf.split(mfcc_features_scaled, target_ids):
+  X_train, X_test = mfcc_features_scaled[train_index], mfcc_features_scaled[test_index]
+  y_train, y_test = target_ids[train_index], target_ids[test_index]
+
+  lda = dimentionality_reduction.LDA()
+  X_train = np.real(lda.fit_transform(X_train, y_train))
+  X_test = np.real(lda.transform(X_test))
+
+  for name, classifier in classifiers.items():
+    accuracy, y_pred = get_score(classifier, X_train, X_test, y_train, y_test)
+    scores[name].append(accuracy)
+
+for key, value in scores.items():
+  print(f"{key} accuracy: {value}")
+
+tmp_Df = pd.DataFrame(np.real(X_train[:, :2]), columns=['LDA Component 1','LDA Component 2'])
 tmp_Df['Class']=y_train
 
 import seaborn as sns
@@ -94,23 +130,12 @@ sns.FacetGrid(tmp_Df, hue ="Class",
 plt.legend(loc='upper right')
 plt.show()
 
-# Initialize a list to store the accuracy scores for each fold
-accuracy_scores = []
-classifier = KNeighborsClassifier(n_neighbors=8, weights='distance')
-classifier.fit(X_train, y_train)
-y_pred = classifier.predict(X_test)
+# conf_m = confusion_matrix(y_test, y_pred)
 
-#Assume 'y_test' and 'y_pred' are already defined
-accuracy = accuracy_score(y_test, y_pred)
-conf_m = confusion_matrix(y_test, y_pred)
-
-#Display the accuracy
-print(f'Accuracy: {accuracy:.2f}')
-
-#Display the confusion matrix as a heatmap
-plt.figure(figsize=(6, 6))
-sns.heatmap(conf_m, annot=True, fmt="d", cmap="Blues", cbar=False, square=True)
-plt.xlabel("Predicted")
-plt.ylabel("True")
-plt.title("Confusion Matrix")
-plt.show()
+# #Display the confusion matrix as a heatmap
+# plt.figure(figsize=(6, 6))
+# sns.heatmap(conf_m, annot=True, fmt="d", cmap="Blues", cbar=False, square=True)
+# plt.xlabel("Predicted")
+# plt.ylabel("True")
+# plt.title("Confusion Matrix")
+# plt.show()

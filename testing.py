@@ -17,6 +17,10 @@ try:
     import torchaudio
     from torchsummary import summary
 
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.model_selection import StratifiedKFold
+    from sklearn.manifold import TSNE, Isomap
+
     import pandas as pd
     import numpy as np
     import librosa
@@ -29,6 +33,8 @@ try:
     import dataset
     import plotting
     import feature_extraction
+    import dimentionality_reduction
+    import models
 
 except ModuleNotFoundError:
     setup.run()
@@ -75,47 +81,51 @@ if PLOTTING:
 # %% Creating the dataset
 
 # Creating a mel spectogram for the feature extraction / transformation
-transforms = feature_extraction.ExtractMFCC(SAMPLE_RATE, NCEPS, NFILTS, WIN_LENGTH)
-
-# Other features can be used such as the GFCC, FBank, Spectral (Centroid, Rolloff, Flatness), etc.
+transforms = [feature_extraction.ExtractRMS(),
+              feature_extraction.ExtractSpectralFlatness(SAMPLE_RATE, WIN_LENGTH),
+              feature_extraction.ExtractSpectralCentroid(SAMPLE_RATE, WIN_LENGTH),
+              feature_extraction.ExtractSpectralRolloff(SAMPLE_RATE, WIN_LENGTH),
+              feature_extraction.ExtractZeroCrossingRate(),
+              feature_extraction.ExtractMFCC(SAMPLE_RATE, NCEPS, NFILTS, WIN_LENGTH),
+              feature_extraction.ExtractGFCC(SAMPLE_RATE, NCEPS, NFILTS, WIN_LENGTH)]
 
 # Creating the dataset
 # This dataset performs pre-processing on the audio files
 # such as resampling, resizing (to mono), normalization, and feature extraction
-audio_dataset = dataset.AudioDataset(annotations, AUDIO_FILES, transforms, SAMPLE_RATE, NUM_SAMPLES)
+# Here just the MFCC transform is passed to the dataset object
+audio_dataset = dataset.AudioDataset(annotations, AUDIO_FILES, transforms[5], SAMPLE_RATE, NUM_SAMPLES)
 
 # %% Displaying each feature extraction for the first audio file in each class
-
-# Creating dictionaries to hold the data and the corresponding class label as a key
-tmp_signals = {}
-tmp_fft = {}
-tmp_zcs = {}
-tmp_fbank = {}
-tmp_mfccs = {}
-tmp_gfccs = {}
-tmp_scs = {}
-tmp_sfs = {}
-tmp_srs = {}
-
-# Getting all the unique class labels
-classes = list(np.unique(annotations.ClassLabel))
-
-# Iterating through the classes and selecting the first signal from each to extract features
-for c in classes:
-    wav_file = annotations[annotations.ClassLabel == c].iloc[0, 0]
-    signal, fs = librosa.load(os.path.join(AUDIO_FILES, wav_file), mono=True, sr=None)
-    tmp_signals[c] = signal
-    tmp_fft[c] = feature_extraction.calculate_fft(signal, fs)
-    tmp_zcs[c] = feature_extraction.zero_crossing_rate(signal).T
-    tmp_scs[c] = feature_extraction.spectral_centroid(y=signal, sr=fs).T
-    tmp_srs[c] = feature_extraction.spectral_rolloff(y=signal+0.01, sr=fs).T
-    tmp_sfs[c] = feature_extraction.spectral_flatness(y=signal).T
-    tmp_fbank[c] = feature_extraction.logfbank(signal[:fs], fs, nfilt=NFILTS, nfft=WIN_LENGTH).T
-    tmp_mfccs[c] = feature_extraction.mfcc(signal[:fs], fs, numcep=NCEPS, nfilt=NFILTS, nfft=WIN_LENGTH).T
-    tmp_gfccs[c] = feature_extraction.gfcc(signal[:fs], fs, num_ceps=NCEPS, nfilts=NFILTS, nfft=WIN_LENGTH).T
-
-# Plotting the feature extractions of the audio
 if PLOTTING:
+    # Creating temporary dictionaries to hold the data and the corresponding class label as a key
+    tmp_signals = {}
+    tmp_fft = {}
+    tmp_zcs = {}
+    tmp_fbank = {}
+    tmp_mfccs = {}
+    tmp_gfccs = {}
+    tmp_scs = {}
+    tmp_sfs = {}
+    tmp_srs = {}
+
+    # Getting all the unique class labels
+    classes = list(np.unique(annotations.ClassLabel))
+
+    # Iterating through the classes and selecting the first signal from each to extract features
+    for c in classes:
+        wav_file = annotations[annotations.ClassLabel == c].iloc[0, 0]
+        signal, fs = librosa.load(os.path.join(AUDIO_FILES, wav_file), mono=True, sr=None)
+        tmp_signals[c] = signal
+        tmp_fft[c] = feature_extraction.calculate_fft(signal, fs)
+        tmp_zcs[c] = feature_extraction.zero_crossing_rate(signal).T
+        tmp_scs[c] = feature_extraction.spectral_centroid(y=signal, sr=fs).T
+        tmp_srs[c] = feature_extraction.spectral_rolloff(y=signal+0.01, sr=fs).T
+        tmp_sfs[c] = feature_extraction.spectral_flatness(y=signal).T
+        tmp_fbank[c] = feature_extraction.logfbank(signal[:fs], fs, nfilt=NFILTS, nfft=WIN_LENGTH).T
+        tmp_mfccs[c] = feature_extraction.mfcc(signal[:fs], fs, num_ceps=NCEPS, nfilts=NFILTS, nfft=WIN_LENGTH).T
+        tmp_gfccs[c] = feature_extraction.gfcc(signal[:fs], fs, num_ceps=NCEPS, nfilts=NFILTS, nfft=WIN_LENGTH).T
+
+    # Plotting the feature extractions of the audio
     plotting.plot_signals_time(tmp_signals)
     plotting.plot_ffts(tmp_fft)
     plotting.plot_time_feature(tmp_zcs, 'Zero Crossing Rate')
@@ -126,96 +136,85 @@ if PLOTTING:
     plotting.plot_spectrogram(tmp_mfccs, 'MFCC')
     plotting.plot_spectrogram(tmp_gfccs, 'GFCC')
 
-# del tmp_signals, tmp_fft, tmp_fbank, tmp_mfccs, tmp_gfccs, tmp_scs, tmp_sfs, tmp_srs
+    # Deleting the temporary dictionaries
+    del tmp_signals, tmp_fft, tmp_fbank, tmp_mfccs, tmp_gfccs, tmp_scs, tmp_sfs, tmp_srs
 
 # %% Performing PCA
-import data_anaysis
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import KFold
-from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE, Isomap
 
 # Create a pandas DataFrame to hold the features
-features_df = feature_extraction.export_features(audio_dataset,
-                                                 feature_extraction.ExtractMFCC(SAMPLE_RATE, NCEPS, NFILTS, WIN_LENGTH))
+columns = audio_dataset.get_multiple_transformations_columns(transforms)
+features = []
+targets = []
 
-# Get the features and standardise them
-features = features_df.iloc[:, :-1].to_numpy()
-targets = features_df[['target']].to_numpy(dtype=int).flatten()
+for i in range(len(audio_dataset)):
+    data, target = audio_dataset.get_multiple_transformations(i, transforms)
+    features.append(data)
+    targets.append(target)
 
-# Perform PCA
-# pca_components = PCA(n_components=2).fit_transform(features)
-features = StandardScaler().fit_transform(features)
-kmeans = KMeans(n_clusters=len(audio_dataset.get_class_labels()), random_state=0).fit(features)
-pca_components = PCA(0.9).fit_transform(features)
+feature_dataset = pd.DataFrame(np.array(features), columns=columns)
+feature_dataset['target'] = targets
+labels = audio_dataset.get_class_labels()
 
-# print(pca_components.shape)
-# var_thresh = 95; # 95% of variance explained
-# cum_var = np.cumsum(explained); # cumulative sum of explained variance
-# n_pc = cum_var[cum_var >= var_thresh]
-# print(n_pc)
+# Apply standardization to the MFCC features
+scaler = StandardScaler()
+features_scaled = scaler.fit_transform(features)
 
-# isomap_components = Isomap(n_components=2).fit_transform(features)
-# lle_components = LocallyLinearEmbedding(n_components=2).fit_transform(features)
-# tsne_components = TSNE(n_components=2).fit_transform(features)
+# Apply custom PCA
+pca = dimentionality_reduction.PCA(-1)
+features_pca = np.real(pca.fit_transform(features_scaled))
+# Apply custom LDA
+lda = dimentionality_reduction.LDA(-1)
+features_lda = np.real(lda.fit_transform(features_scaled, targets))
+
+# Testing other dimensionality reduction techniques
+features_isomap = Isomap(n_neighbors=8, n_components=3).fit_transform(features_scaled, targets)
+features_tsne = TSNE(n_components=3, method='barnes_hut').fit_transform(features_scaled, targets)
+
+def get_best_dim(dr):
+    # Getting the explained variance ratio
+    explained_variance_ratio = dr.get_explained_variance()
+    # Calculate the cumulative explained variance ratio
+    cumulative_explained_variance_ratio = np.cumsum(explained_variance_ratio)
+    # Find the number of dimensions with the highest explained variance
+    best_dimensions = np.argmax(cumulative_explained_variance_ratio >= 0.95) + 1
+    return explained_variance_ratio, cumulative_explained_variance_ratio, best_dimensions
 
 # Plot the PCA
 if not PLOTTING:
-    # Plot the results of k-means clustering and PCA
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
+    # Calculate and plot the explained variance ratio for each principal component
+    pca_evr, pca_cevr, pca_bd = get_best_dim(pca)
+    plotting.plot_explained_variance(pca_evr, pca_cevr, pca_bd, 'PCA')
 
-    # Plot the k-means clusters
-    colors = np.array(['r', 'g', 'b', 'c', 'm', 'y', 'k'])
-    ax1.scatter(pca_components[:, 0], pca_components[:, 1], c=colors[kmeans.labels_])
-    ax1.set_title('K-means clustering')
+    # Plotting various components (first 3 dimensions) on a 3D scatter plot
+    plotting.plot_dimentionality_reduction(features_pca, targets, labels, 'PCA')
+    plotting.plot_dimentionality_reduction(features_isomap, targets, labels, 'Isomap')
+    plotting.plot_dimentionality_reduction(features_tsne, targets, labels, 't-SNE')
+    plotting.plot_dimentionality_reduction(features_lda, targets, labels, 'LDA')
 
-    # Plot the PCA results
-    ax2.scatter(pca_components[:, 0], pca_components[:, 1], c=colors[targets])
-    ax2.set_title('PCA')
 
-    plt.show()
+# # Plot the results of k-means clustering and PCA
+# fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
 
-    # # Plot the PCA components on a scatter plot for each target
-    # plt.figure(figsize=(10, 6))
-    # targets_unique = targets['target'].unique()
-    # colors = ['r', 'g', 'b', 'c', 'm', 'y', 'k']
-    # for i, target in enumerate(targets_unique):
-    #     indices = targets.index[targets['target'] == target]
-    #     plt.scatter(pca_components[indices, 0], pca_components[indices, 1], c=colors[i], label=target)
-    # plt.xlabel('PCA Component 1')
-    # plt.ylabel('PCA Component 2')
-    # plt.legend()
-    # plt.title('PCA Components')
-    # plt.show()
+# # Plot the k-means clusters
+# colors = np.array(['r', 'g', 'b', 'c', 'm', 'y', 'k'])
+# ax1.scatter(pca_components[:, 0], pca_components[:, 1], c=colors[kmeans.labels_])
+# ax1.set_title('K-means clustering')
 
-exit()
-# %% Creating a kNN model using PCA and t-SNE for dimensionality reduction
+# # Plot the PCA results
+# ax2.scatter(pca_components[:, 0], pca_components[:, 1], c=colors[targets])
+# ax2.set_title('PCA')
 
-kf = KFold(n_splits=K_FOLDS, shuffle=True)
+# plt.show()
 
-# Loop through each fold
-for fold, (train_idx, test_idx) in enumerate(kf.split(audio_dataset)):
-    print(f"Fold {fold + 1}")
-    print("-------")
-
-    # Define the data loaders for the current fold
-    train_loader = DataLoader(
-        dataset=audio_dataset,
-        batch_size=BATCH_SIZE,
-        sampler=torch.utils.data.SubsetRandomSampler(train_idx),
-    )
-    test_loader = DataLoader(
-        dataset=audio_dataset,
-        batch_size=BATCH_SIZE,
-        sampler=torch.utils.data.SubsetRandomSampler(test_idx),
-    )
-
-    # Train the model on the current fold
-    for data, target in train_loader:
-        print(data.shape)
-        print(target)
-    
-    for data, target in test_loader:
-        print(data.shape)
-        print(target)
+# # # Plot the PCA components on a scatter plot for each target
+# # plt.figure(figsize=(10, 6))
+# # targets_unique = targets['target'].unique()
+# # colors = ['r', 'g', 'b', 'c', 'm', 'y', 'k']
+# # for i, target in enumerate(targets_unique):
+# #     indices = targets.index[targets['target'] == target]
+# #     plt.scatter(pca_components[indices, 0], pca_components[indices, 1], c=colors[i], label=target)
+# # plt.xlabel('PCA Component 1')
+# # plt.ylabel('PCA Component 2')
+# # plt.legend()
+# # plt.title('PCA Components')
+# # plt.show()

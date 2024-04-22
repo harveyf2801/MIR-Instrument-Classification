@@ -2,9 +2,10 @@ import numpy as np
 import torch
 import pandas as pd
 
-from librosa.feature import spectral_flatness, spectral_centroid, spectral_rolloff, zero_crossing_rate
+from librosa.feature import spectral_flatness, spectral_centroid, spectral_rolloff, zero_crossing_rate, rms
 from spafe.features.gfcc import gfcc
-from python_speech_features import logfbank, mfcc
+from spafe.features.mfcc import mfcc
+from python_speech_features import logfbank
 
 def calculate_fft(y, fs):
 	'''
@@ -23,6 +24,32 @@ def calculate_fft(y, fs):
 
 # Torch transformation features
 
+class ExtractRMS(object):
+    """Extract Root Mean Square (RMS) feature.
+
+    Args:
+        output_size (tuple or int): Desired output size. If int, square crop
+            is made.
+    """
+    name = 'rms'
+
+    def __call__(self, signal):
+        feature = rms(y=signal)
+        return feature
+
+class ExtractZeroCrossingRate(object):
+    """Extract Zero Crossing Rate (ZCR) feature.
+
+    Args:
+        output_size (tuple or int): Desired output size. If int, square crop
+            is made.
+    """
+    name = 'zcr'
+
+    def __call__(self, signal):
+        feature = zero_crossing_rate(signal).T
+        return feature
+    
 class ExtractMFCC(object):
     """Extract MFCC feature.
 
@@ -39,7 +66,7 @@ class ExtractMFCC(object):
         self.nfft = nfft
 
     def __call__(self, signal):
-        feature = mfcc(signal, self.fs, numcep=self.numcep, nfilt=self.nfilt, nfft=self.nfft).T
+        feature = mfcc(signal, self.fs, num_ceps=self.numcep, nfilts=self.nfilt, nfft=self.nfft).T
         return feature
 
 class ExtractGFCC(object):
@@ -133,42 +160,3 @@ class ExtractFbank(object):
     def __call__(self, signal):
         feature = logfbank(signal, self.fs, nfilt=self.nfilt, nfft=self.nfft).T
         return feature
-
-def export_features(dataset, feature):
-    """
-    Export the features.
-
-    Parameters:
-        dataset (AudioDataset): The dataset containing the audio files.
-        feature (feature_extraction class): The feature extracted from the audio files.
-    """
-
-    # Create a pandas DataFrame to hold the features
-    features_df = pd.DataFrame()
-
-    # Iterate through the dataset and calculate the mean of each feature
-    dataset.set_transformations(feature)
-
-    for i in range(int(len(dataset))):
-        data, target = dataset[i]
-
-        # Calculate the mean along axis 1
-        mean_feature = np.mean(data.numpy(), axis=1)
-        # Calculate the standard deviation of the data
-        std_feature = np.std(data.numpy(), axis=1)
-
-        # COULD FLATTEN THE DATA INSTEAD OF TAKING THE MEAN
-        # flatten_feature = data.numpy().flatten()
-        
-        # Add the mean feature to the DataFrame
-        for j, coeff in enumerate(mean_feature):
-            features_df.at[i, f'{feature.name} avg {j+1}'] = coeff
-
-        # Add the standard deviation to the DataFrame
-        for j, coeff in enumerate(std_feature):
-            features_df.at[i, f'{feature.name} std {j+1}'] = coeff
-
-        # Add the target to the DataFrame
-        features_df.at[i, 'target'] = target
-
-    return features_df

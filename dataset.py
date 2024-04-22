@@ -41,7 +41,7 @@ def create_file_annotations(dir):
 class AudioDataset(Dataset):
     ''' Custom Dataset class for audio instrument classification '''
 
-    def __init__(self, annotations, audio_dir, transformations, transform_fs, num_samples):
+    def __init__(self, annotations, audio_dir, transformation, transform_fs, num_samples):
         '''
         Parameters -
             annotations: the annotations for the dataset
@@ -56,7 +56,7 @@ class AudioDataset(Dataset):
 
         # Defining attributes
         self.audio_dir = audio_dir
-        self.transformations = transformations # putting the data onto a cuda device if available
+        self.transformation = transformation
         self.transform_fs = transform_fs
         self.num_samples = num_samples
 
@@ -67,6 +67,15 @@ class AudioDataset(Dataset):
     def __getitem__(self, index):
         ''' Magic method to provide indexing for the object '''
 
+        signal, labelID = self._get_audio_signal(index)
+
+        # Performs transformations on the audio signal
+        features = torch.from_numpy(self.transformation(signal[0].numpy()))
+
+        return features, labelID
+    
+    def _get_audio_signal(self, index):
+        ''' Private method to get the audio signal for the dataset '''
         # Gets the audio path and labelID for the index
         audio_sample_path, labelID = self._get_audio_sample_path_and_label(index)
 
@@ -79,10 +88,7 @@ class AudioDataset(Dataset):
         signal = self._envelope_audio(signal, self.transform_fs, 0.0005)
         signal = self._reshape_audio(signal)
 
-        # Performs transformation on the device
-        features = torch.from_numpy(self.transformations(signal[0].numpy()))
-
-        return features, labelID
+        return signal, labelID
 
     def set_transformations(self, transformations):
         ''' Public method to set the transformations for the dataset '''
@@ -148,4 +154,27 @@ class AudioDataset(Dataset):
 
         return signal
 
-
+    def get_multiple_transformations(self, index, transformations):
+        ''' Public method to get multiple transformations for the dataset '''
+        signal, labelID = self._get_audio_signal(index)
+        features = np.array([])
+        for transformation in transformations:
+            feature = transformation(signal[0].numpy())
+            if transformation.name in ('mfcc', 'gfcc'):
+                features = np.hstack([features, np.mean(feature, axis=1), np.std(feature, axis=1)])
+            else:
+                features = np.hstack([features, np.mean(feature), np.std(feature)])
+        
+        return features, labelID
+    
+    def get_multiple_transformations_columns(self, transformations):
+        ''' Public method to get the columns for multiple transformations '''
+        columns = []
+        for transformation in transformations:
+            if transformation.name in ('mfcc', 'gfcc'):
+                columns.extend([f'{transformation.name}_{i}_mean' for i in range(1, 14)])
+                columns.extend([f'{transformation.name}_{i}_std' for i in range(1, 14)])
+            else:
+                columns.extend([f'{transformation.name}_mean', f'{transformation.name}_std'])
+        
+        return columns

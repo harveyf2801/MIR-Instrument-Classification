@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import librosa
 import numpy as np
 from sklearn import preprocessing
+import seaborn as sns
+import pandas as pd
 
 def plot_class_distribution(annotations):
     # Getting the class distribution
@@ -134,4 +136,51 @@ def plot_spectrogram(signals, title):
 		z += 1
 	
 	plt.tight_layout()
+	plt.show()
+
+def plot_dimentionality_reduction(X, y, labels, title):
+	'''
+	Plots the dimentionality reduction of the signals.
+
+	Parameters:
+		X (numpy array): The input signals in a list.
+		y (numpy array): The input signals in a list.
+		labels (list): The list of labels.
+		title (str): The title of the feature i.e. 'PCA' or 'LDA' etc.
+	'''
+
+	Xax = X[:,0]
+	Yax = X[:,1]
+	Zax = X[:,2]
+
+	colours = ['r', 'g', 'b', 'y', 'c', 'm', 'k']
+
+	fig = plt.figure(figsize=(7,5))
+	ax = fig.add_subplot(111, projection='3d')
+
+	fig.patch.set_facecolor('white')
+	for l in np.unique(y):
+		ix=np.where(y==l)
+		ax.scatter(Xax[ix], Yax[ix], Zax[ix], c=colours[l], s=40,
+				label=labels[l])
+	# for loop ends
+	ax.set_xlabel(f"1st {title} Component", fontsize=12, labelpad=20)
+	ax.set_ylabel(f"2nd {title} Component", fontsize=12, labelpad=20)
+	ax.set_zlabel(f"3rd {title} Component", fontsize=12, labelpad=20)
+
+	ax.legend(loc='best')
+	plt.show()
+
+def plot_explained_variance(explained_variance_ratio,
+							cumulative_explained_variance_ratio,
+							best_dimensions,
+							title):
+
+	plt.figure(figsize=(8, 6))
+	plt.plot(range(1, np.size(explained_variance_ratio) + 1), cumulative_explained_variance_ratio, 'b-')
+	plt.axvline(x=best_dimensions, color='r', linestyle='--')
+	plt.xlabel('Number of Dimensions')
+	plt.ylabel('Cumulative Explained Variance Ratio')
+	plt.title(f'{title} Best Dimensions')
+	plt.grid(True)
 	plt.show()

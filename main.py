@@ -1,121 +1,96 @@
-# Import python packages required
-import torch
-import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
-import torchaudio
-from torchsummary import summary
-
+import os
+import librosa
 import pandas as pd
 import numpy as np
-from scipy.io import wavfile
 
-import librosa
-from python_speech_features import logfbank, mfcc
+import feature_extraction
 
-from IPython.display import display
-import matplotlib.pyplot as plt
+# Path to the folder containing audio files
+audio_folder = "wavfiles"
 
-import os
-from tqdm import tqdm
-from pathlib import Path
-import logging
+# # List to store MFCC features
+# features = []
+# target_labels = []
+# columns = []
 
-import dataset
-import plotting
+# NCEPS = 13
 
-# Setting global constants
-# The directory paths for the audio files
-AUDIO_FILES = Path(os.getcwd(), 'wavfiles')
-ANNOTATIONS = Path(os.getcwd(), 'annotations.csv')
-# Setting wether to run plots or not
-PLOTTING = False
+# for f in ['rms', 'spf', 'spc', 'spr', 'zcr']:
+#     for type in ['mean', 'std']:
+#         columns.append(f"{f}_{type}")
 
-# Create annotations file if not already created for the dataset
-# or load in the annotations csv file
-if not os.path.exists(ANNOTATIONS):
-    # Getting the dataframe for the file annotations
-    annotations = dataset.create_file_annotations(AUDIO_FILES)
-    # Save the dataframe to a CSV file
-    annotations.to_csv(path_or_buf=ANNOTATIONS, sep=',', encoding='utf-8', index=False)
-    logging.info("Creating annotations .csv file")
-else:
-    annotations = pd.read_csv(ANNOTATIONS)
+# for f in ['mfcc', 'gfcc']:
+#     for type in ['mean', 'std']:
+#         for cep in range(NCEPS):
+#             columns.append(f"{f}_{cep}_{type}")
 
-# Plotting the class distribution for the dataset
-if PLOTTING:
-    plotting.plot_class_distribution(annotations)
+# # Iterate over each audio file in the folder
+# for filename in os.listdir(audio_folder):
+#   if filename.endswith(".wav"):
+#     file_path = os.path.join(audio_folder, filename)
+#     # Load audio file
+#     audio, sr = librosa.load(file_path, sr=22500)
 
-# Defining the dataset and dataloader constants
-SAMPLE_RATE = 22050
-NUM_SAMPLES = 22050
-BATCH_SIZE = 128
+#     # Pad audio signal to a fixed length
+#     fixed_length = sr*2  # Assuming a fixed length of 1 second (44100 samples at 44.1 kHz)
+#     padded_audio = librosa.util.fix_length(audio, size=fixed_length)
 
-WIN_LENGTH = 2**10
-HOP_LENGTH = 2**9
-NMFCC = 13 # 64?
+#     # Extract MFCC features
+#     rms = feature_extraction.rms(y=padded_audio)
+#     spf = feature_extraction.spectral_flatness(y=padded_audio, n_fft=2**10).T
+#     spc = feature_extraction.spectral_centroid(y=padded_audio, sr=sr, n_fft=2**10).T
+#     spr = feature_extraction.spectral_rolloff(y=padded_audio+0.01, sr=sr, n_fft=2**10).T
+#     zcr = feature_extraction.zero_crossing_rate(padded_audio)
+#     mfcc = feature_extraction.mfcc(padded_audio, fs=sr, num_ceps=13, nfilts=26, nfft=2**10)
+#     gfcc = feature_extraction.gfcc(padded_audio, fs=sr, num_ceps=13, nfilts=26, nfft=2**10)
 
-# Creating a mel spectogram for the feature extraction / transformation
-transformation = torchaudio.transforms.MelSpectrogram(
-    sample_rate=SAMPLE_RATE,
-    win_length=WIN_LENGTH,
-    n_fft=WIN_LENGTH,
-    hop_length=HOP_LENGTH,
-    n_mels=64
-)
+#     # Split filename at "-"
+#     label = filename.split("-")[0]
+    
+#     # Append MFCC features and label to the list
+#     features.append(np.hstack([rms.mean(), rms.std(),
+#                                 spf.mean(), spf.std(),
+#                                 spc.mean(), spc.std(),
+#                                 spr.mean(), spr.std(),
+#                                 zcr.mean(), zcr.std(),
+#                                 mfcc.mean(axis=0), mfcc.std(axis=0),
+#                                 gfcc.mean(axis=0), gfcc.std(axis=0)]))
+#     target_labels.append(label)
 
-# Defining the device being used
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-logging.info(f"Device available: {device}")
+# # Convert the list of MFCC features to a numpy array
+# features = np.array(features)
 
-# Creating the dataset and dataloader
-audio_dataset = dataset.AudioDataset(annotations, AUDIO_FILES, device, transformation, SAMPLE_RATE, NUM_SAMPLES)
-data_loader = DataLoader(audio_dataset, batch_size=BATCH_SIZE)
+# feature_df = pd.DataFrame(features, columns=columns)
+# feature_df['target'] = target_labels
 
-# def spectral_features(signal):
-#     spectrogram = torch.stft(signal, win_length=WIN_LENGTH, n_fft=WIN_LENGTH, hop_length=HOP_LENGTH)
-#     M = np.abs(spectrogram)
-#     sc = librosa.feature.spectral_centroid(S=M)
-#     sf = librosa.feature.spectral_flatness(S=M)
+# print(feature_df.head())
 
-i = 0
-for input, target in audio_dataset:
-    sf = spectral_features(input)
-    mfcc_mean[i, :] = np.mean(sf['mfccs'][:, 1:], axis=1)
-    sc_mean[i] = np.mean(sf['spectral_centroids'])
-    sf_mean[i] = np.mean(sf['spectral_flatness'])
-    print(target)
+from dataset import AudioDataset, create_file_annotations
 
-    i+=1
+annotations = create_file_annotations(audio_folder)
+fs = 22500
 
-# KNN with k-fold cross-validation
-# perform k-fold cross-validation
+transforms = [feature_extraction.ExtractRMS(),
+              feature_extraction.ExtractSpectralFlatness(fs, 2**10),
+              feature_extraction.ExtractSpectralCentroid(fs, 2**10),
+              feature_extraction.ExtractSpectralRolloff(fs, 2**10),
+              feature_extraction.ExtractZeroCrossingRate(),
+              feature_extraction.ExtractMFCC(fs, 13, 26, 2**10),
+              feature_extraction.ExtractGFCC(fs, 13, 26, 2**10)]
 
-# perform knn
-n_k = 3
-acc = np.zeros(c.numtestsets, 1)
-pred_labels = []
-true_labels = []
-for k in range(c.numtestsets):
-    train_data = features[c.training[k], :]
-    train_ann = ann[c.training[k]]
-    test_data = features[c.test[k], :]
-    test_ann = ann[c.test[k]]
-    training_std = zscore[train_data]
-    coeff, _, _, _, explain = pca(training_std) # could also use LDA
+audio_dataset = AudioDataset(annotations, audio_folder, transforms[0], fs, 2*fs)
 
-    var_thresh = 95 # 95 percent
-    cu_var = np.cumsum(explain)
-    n_pc = find[cu_var >= var_thresh]
-    train_data_pca = training_std * coeff[:, 0:n_pc]
-    test_data_pca = (test_data - np.mean(train_data)) / np.std(train_data, axis=0) * coeff[:, 0:n_pc]
+columns = audio_dataset.get_multiple_transformations_columns(transforms)
 
-    knn_model = fitcknn(train_data_pca, train_ann, NumNeighbors=n_k)
-    pred_knn = predict(knn_model, test_data_pca)
-    acc[k] = np.sum(pred_knn == test_ann) / numel(test_ann)
+features = []
+targets = []
 
-    pred_labels = pred_labels.append(pred_knn.T)
-    true_labels = true_labels.append(test_ann.T)
+for i in range(len(audio_dataset)):
+    data, target = audio_dataset.get_multiple_transformations(i, transforms)
+    features.append(data)
+    targets.append(target)
 
-score = np.mean(acc)*100
-C = confusionmat(true_labels, pred_labels)
-confusionchart(C, class_labels)
+feature_dataset = pd.DataFrame(np.array(features), columns=columns)
+feature_dataset['target'] = targets
+
+print(feature_dataset.head())
