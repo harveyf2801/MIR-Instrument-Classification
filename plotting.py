@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import librosa
 import numpy as np
 from sklearn import preprocessing
+from sklearn.metrics import confusion_matrix
 import seaborn as sns
 import pandas as pd
 
@@ -183,4 +184,13 @@ def plot_explained_variance(explained_variance_ratio,
 	plt.ylabel('Cumulative Explained Variance Ratio')
 	plt.title(f'{title} Best Dimensions')
 	plt.grid(True)
+	plt.show()
+
+def plot_confusion_matrix(best_model):
+	conf_m = confusion_matrix(best_model['y_test'], best_model['y_pred'])
+	plt.figure()
+	sns.heatmap(conf_m, annot=True, fmt="d", cmap="Blues", cbar=False, square=True)
+	plt.xlabel("Predicted")
+	plt.ylabel("True")
+	plt.title(f"Confusion Matrix ({best_model['model']})")
 	plt.show()
