@@ -19,7 +19,7 @@ try:
 
     from sklearn.preprocessing import StandardScaler
     from sklearn.model_selection import StratifiedKFold
-    from sklearn.manifold import TSNE, Isomap
+    from sklearn.manifold import TSNE
 
     import pandas as pd
     import numpy as np
@@ -167,7 +167,6 @@ lda = dimentionality_reduction.LDA(-1)
 features_lda = np.real(lda.fit_transform(features_scaled, targets))
 
 # Testing other dimensionality reduction techniques
-features_isomap = Isomap(n_neighbors=8, n_components=3).fit_transform(features_scaled, targets)
 features_tsne = TSNE(n_components=3, method='barnes_hut').fit_transform(features_scaled, targets)
 
 def get_best_dim(dr):
@@ -180,41 +179,15 @@ def get_best_dim(dr):
     return explained_variance_ratio, cumulative_explained_variance_ratio, best_dimensions
 
 # Plot the PCA
-if not PLOTTING:
+if PLOTTING:
     # Calculate and plot the explained variance ratio for each principal component
     pca_evr, pca_cevr, pca_bd = get_best_dim(pca)
     plotting.plot_explained_variance(pca_evr, pca_cevr, pca_bd, 'PCA')
 
     # Plotting various components (first 3 dimensions) on a 3D scatter plot
     plotting.plot_dimentionality_reduction(features_pca, targets, labels, 'PCA')
-    plotting.plot_dimentionality_reduction(features_isomap, targets, labels, 'Isomap')
     plotting.plot_dimentionality_reduction(features_tsne, targets, labels, 't-SNE')
     plotting.plot_dimentionality_reduction(features_lda, targets, labels, 'LDA')
 
+# %% Training the model
 
-# # Plot the results of k-means clustering and PCA
-# fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
-
-# # Plot the k-means clusters
-# colors = np.array(['r', 'g', 'b', 'c', 'm', 'y', 'k'])
-# ax1.scatter(pca_components[:, 0], pca_components[:, 1], c=colors[kmeans.labels_])
-# ax1.set_title('K-means clustering')
-
-# # Plot the PCA results
-# ax2.scatter(pca_components[:, 0], pca_components[:, 1], c=colors[targets])
-# ax2.set_title('PCA')
-
-# plt.show()
-
-# # # Plot the PCA components on a scatter plot for each target
-# # plt.figure(figsize=(10, 6))
-# # targets_unique = targets['target'].unique()
-# # colors = ['r', 'g', 'b', 'c', 'm', 'y', 'k']
-# # for i, target in enumerate(targets_unique):
-# #     indices = targets.index[targets['target'] == target]
-# #     plt.scatter(pca_components[indices, 0], pca_components[indices, 1], c=colors[i], label=target)
-# # plt.xlabel('PCA Component 1')
-# # plt.ylabel('PCA Component 2')
-# # plt.legend()
-# # plt.title('PCA Components')
-# # plt.show()

@@ -10,7 +10,7 @@ class PCA():
 
         self.last_eigenvalues = None
     
-    def fit(self, X):
+    def fit(self, X, y=None):
         # Calculate the mean of the input data
         self.mean = np.mean(X, axis=0)
 
@@ -32,7 +32,7 @@ class PCA():
         # Select the first n_components eigenvectors as the principal components
         self.components = eigenvectors[0:self.n_components]
     
-    def fit_transform(self, X):
+    def fit_transform(self, X, y=None):
         # Fit the PCA model to the input data X
         self.fit(X)
         # Project the input data X onto the principal components

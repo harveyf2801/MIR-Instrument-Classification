@@ -13,7 +13,8 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix
-
+from sklearn.feature_selection import SelectKBest, f_classif
+from scipy.stats import kendalltau
 import feature_extraction
 
 import dimentionality_reduction
@@ -75,6 +76,9 @@ target_ids = np.array([target_id_mapping[label] for label in target_labels])
 scaler = StandardScaler()
 mfcc_features_scaled = scaler.fit_transform(mfcc_features, target_ids)
 
+# Feature selection
+fvalue_Best = SelectKBest(f_classif, k=10)
+mfcc_features_scaled = fvalue_Best.fit_transform(mfcc_features_scaled, target_ids)
 
 # Apply Linear Discriminant Analysis
 import dimentionality_reduction 
@@ -98,37 +102,38 @@ scores = {
 }
 
 classifiers = {
-  'knn': KNNClassifier(10),
+  'knn': KNNClassifier(12),
   'rf': RandomForestClassifier(n_estimators=40),
-  'svc': SVC(gamma=1.0)
+  'svc': SVC(gamma='auto')
 }
 
-for train_index, test_index in kf.split(mfcc_features_scaled, target_ids):
-  X_train, X_test = mfcc_features_scaled[train_index], mfcc_features_scaled[test_index]
-  y_train, y_test = target_ids[train_index], target_ids[test_index]
+for dr in [dimentionality_reduction.PCA(), dimentionality_reduction.LDA()]:
+  for train_index, test_index in kf.split(mfcc_features_scaled, target_ids):
+    X_train, X_test = mfcc_features_scaled[train_index], mfcc_features_scaled[test_index]
+    y_train, y_test = target_ids[train_index], target_ids[test_index]
 
-  lda = dimentionality_reduction.LDA()
-  X_train = np.real(lda.fit_transform(X_train, y_train))
-  X_test = np.real(lda.transform(X_test))
+    X_train = np.real(dr.fit_transform(X_train, y_train))
+    X_test = np.real(dr.transform(X_test))
 
-  for name, classifier in classifiers.items():
-    accuracy, y_pred = get_score(classifier, X_train, X_test, y_train, y_test)
-    scores[name].append(accuracy)
+    for name, classifier in classifiers.items():
+      accuracy, y_pred = get_score(classifier, X_train, X_test, y_train, y_test)
+      scores[name].append(accuracy)
 
-for key, value in scores.items():
-  print(f"{key} accuracy: {value}")
+  for key, value in scores.items():
+    print(f"{key} accuracy: {np.mean(value)*100:.2f}%")
+    value = []
 
 tmp_Df = pd.DataFrame(np.real(X_train[:, :2]), columns=['LDA Component 1','LDA Component 2'])
 tmp_Df['Class']=y_train
 
-import seaborn as sns
-sns.FacetGrid(tmp_Df, hue ="Class",
-              height = 6).map(plt.scatter,
-                              'LDA Component 1',
-                              'LDA Component 2')
+# import seaborn as sns
+# sns.FacetGrid(tmp_Df, hue ="Class",
+#               height = 6).map(plt.scatter,
+#                               'LDA Component 1',
+#                               'LDA Component 2')
 
-plt.legend(loc='upper right')
-plt.show()
+# plt.legend(loc='upper right')
+# plt.show()
 
 # conf_m = confusion_matrix(y_test, y_pred)
 
