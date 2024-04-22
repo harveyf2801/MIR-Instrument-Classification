@@ -38,7 +38,7 @@ try:
 
 except ModuleNotFoundError:
     setup.run()
-    logging.warning('Please re-run the script. If you see this message again, make sure you have downloaded the correct external packages by looking at `setup.py` packages')
+    logging.error('Please re-run the script. If you see this message again, make sure you have downloaded the correct external packages by looking at `setup.py` packages')
     exit()
 
 # %% Setting global constants
@@ -139,7 +139,7 @@ if PLOTTING:
     # Deleting the temporary dictionaries
     del tmp_signals, tmp_fft, tmp_fbank, tmp_mfccs, tmp_gfccs, tmp_scs, tmp_sfs, tmp_srs
 
-# %% Performing PCA
+# %% Extracting Features
 
 # Create a pandas DataFrame to hold the features
 columns = audio_dataset.get_multiple_transformations_columns(transforms)

@@ -44,9 +44,9 @@ for filename in os.listdir(audio_folder):
     
     spc = feature_extraction.spectral_centroid(y=padded_audio, sr=sr).T
     spr = feature_extraction.spectral_rolloff(y=padded_audio+0.01, sr=sr).T
-    zcr = feature_extraction.zero_crossing_rate(padded_audio)
-    mfcc = feature_extraction.mfcc(padded_audio, fs=sr, num_ceps=13, nfilts=26, nfft=2**10)
-    gfcc = feature_extraction.gfcc(padded_audio, fs=sr, num_ceps=13, nfilts=26, nfft=2**10)
+    zcr = feature_extraction.zero_crossing_rate(padded_audio).T
+    mfcc = feature_extraction.mfcc(padded_audio, sr, numcep=13, nfilt=26, nfft=2**10).T
+    gfcc = feature_extraction.gfcc(padded_audio, fs=sr, num_ceps=13, nfilts=26, nfft=2**10).T
 
     # Split filename at "-"
     label = filename.split("-")[0]
@@ -54,8 +54,8 @@ for filename in os.listdir(audio_folder):
     # Append MFCC features and label to the list
     mfcc_features.append(np.hstack([spr.mean(), spr.std(),
                                     zcr.mean(), zcr.std(),
-                                    mfcc.mean(axis=0), mfcc.std(axis=0),
-                                    gfcc.mean(axis=0), gfcc.std(axis=0)]))
+                                    mfcc.mean(axis=1), mfcc.std(axis=1),
+                                    gfcc.mean(axis=1), gfcc.std(axis=1)]))
     target_labels.append(label)
 
 # Convert the list of MFCC features to a numpy array
@@ -95,19 +95,24 @@ from models import KNNClassifier
 
 k_folds = 7
 kf = StratifiedKFold(n_splits=k_folds)
-scores = {
-  'knn': [],
-  'rf': [],
-  'svc': []
+
+dimentionality_reductions = {
+  'pca': dimentionality_reduction.PCA(),
+  'lda': dimentionality_reduction.LDA()
 }
 
 classifiers = {
-  'knn': KNNClassifier(12),
+  'knn': KNNClassifier(10), # 12
   'rf': RandomForestClassifier(n_estimators=40),
   'svc': SVC(gamma='auto')
 }
 
-for dr in [dimentionality_reduction.PCA(), dimentionality_reduction.LDA()]:
+scores = {}
+for dr_name, dr in dimentionality_reductions.items():
+  for classifier_name, classifier in classifiers.items():
+    scores[f"{dr_name}_{classifier_name}"] = []
+
+for dr_name, dr in dimentionality_reductions.items():
   for train_index, test_index in kf.split(mfcc_features_scaled, target_ids):
     X_train, X_test = mfcc_features_scaled[train_index], mfcc_features_scaled[test_index]
     y_train, y_test = target_ids[train_index], target_ids[test_index]
@@ -115,13 +120,13 @@ for dr in [dimentionality_reduction.PCA(), dimentionality_reduction.LDA()]:
     X_train = np.real(dr.fit_transform(X_train, y_train))
     X_test = np.real(dr.transform(X_test))
 
-    for name, classifier in classifiers.items():
+    for c_name, classifier in classifiers.items():
       accuracy, y_pred = get_score(classifier, X_train, X_test, y_train, y_test)
-      scores[name].append(accuracy)
+      scores[f"{dr_name}_{c_name}"].append(accuracy)
 
-  for key, value in scores.items():
-    print(f"{key} accuracy: {np.mean(value)*100:.2f}%")
-    value = []
+for key, value in scores.items():
+  mean_accuracy = np.mean(value)
+  print(f"{key} accuracy: {mean_accuracy:.2f}%")
 
 tmp_Df = pd.DataFrame(np.real(X_train[:, :2]), columns=['LDA Component 1','LDA Component 2'])
 tmp_Df['Class']=y_train

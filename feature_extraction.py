@@ -4,8 +4,8 @@ import pandas as pd
 
 from librosa.feature import spectral_flatness, spectral_centroid, spectral_rolloff, zero_crossing_rate, rms
 from spafe.features.gfcc import gfcc
-from spafe.features.mfcc import mfcc
-from python_speech_features import logfbank
+# from spafe.features.mfcc import mfcc
+from python_speech_features import logfbank, mfcc
 
 def calculate_fft(y, fs):
 	'''
@@ -66,7 +66,7 @@ class ExtractMFCC(object):
         self.nfft = nfft
 
     def __call__(self, signal):
-        feature = mfcc(signal, self.fs, num_ceps=self.numcep, nfilts=self.nfilt, nfft=self.nfft).T
+        feature = mfcc(signal, self.fs, numcep=self.numcep, nfilt=self.nfilt, nfft=self.nfft).T
         return feature
 
 class ExtractGFCC(object):
