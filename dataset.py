@@ -70,7 +70,7 @@ class AudioDataset(Dataset):
         signal, labelID = self._get_audio_signal(index)
 
         # Performs transformations on the audio signal
-        features = torch.from_numpy(self.transformation(signal[0].numpy()))
+        features = self.transformation(signal)
 
         return features, labelID
     

@@ -187,11 +187,12 @@ def plot_explained_variance(explained_variance_ratio,
 	plt.grid(True)
 	plt.show()
 
-def plot_confusion_matrix(best_model):
-	conf_m = confusion_matrix(best_model['y_test'], best_model['y_pred'])
+def plot_confusion_matrix(y_test, y_pred, title):
+
+	conf_m = confusion_matrix(y_test, y_pred)
 	plt.figure()
 	sns.heatmap(conf_m, annot=True, fmt="d", cmap="Blues", cbar=False, square=True)
 	plt.xlabel("Predicted")
 	plt.ylabel("True")
-	plt.title(f"Confusion Matrix ({best_model['model']})")
+	plt.title(f"Confusion Matrix ({title})")
 	plt.show()

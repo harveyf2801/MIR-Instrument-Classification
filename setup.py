@@ -22,7 +22,8 @@ packages = [
     'matplotlib',
     'python_speech_features',
     'spafe',
-    'seaborn'
+    'seaborn',
+    'cvxopt'
 ]
 
 def run(python='python3', pip='pip3'):
